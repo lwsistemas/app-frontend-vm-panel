@@ -15,6 +15,10 @@ import MainLayout from './MainLayout.jsx';
 import ErrorBoundary from './components/ErrorBoundary';
 import NotFound from './pages/NotFound';
 import InventoryPage from './pages/InventoryDc/InventoryPage.jsx';
+import InfraIps from './pages/InfraIps';
+import PublicIps from './pages/PublicIps';
+
+
 
 
 export default function App() {
@@ -47,6 +51,25 @@ export default function App() {
                                 </ProtectedRoute>
                             }
                         />
+
+                        <Route
+                            path="/infra-ips"
+                            element={
+                                <ProtectedRoute roles={['admin', 'root']}>
+                                    <InfraIps />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/public-ips"
+                            element={
+                                <ProtectedRoute roles={['admin', 'root']}>
+                                    <PublicIps />
+                                </ProtectedRoute>
+                            }
+                        />
+
 
 
                         {/* 🔒 CREATE VM: ROOT / ADMIN / SUPPORT */}

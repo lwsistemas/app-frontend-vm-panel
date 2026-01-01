@@ -17,7 +17,9 @@ import {
     CreditCard,
     LineChart,
     Database,
-    LucideServerCog
+    LucideServerCog,
+    Network,
+
 } from 'lucide-react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 
@@ -55,13 +57,16 @@ export default function Sidebar() {
                 label: 'Providers/Servers',
                 icon: <Server size={16} />,
                 items: [
-                    { to: '/ips', label: 'IPs', icon: <Activity size={16} /> },
+                    { to: '/public-ips', label: 'Public IPs', icon: <Activity size={16} /> },
+                    { to: '/infra-ips', label: 'Infra IPs', icon: <Network size={16} /> },
                     { to: '/inventory', label: 'Inventory DC', icon: <Database size={16} /> },
                     { to: '/templates', label: 'Templates', icon: <FileText size={16} /> },
+
 
                 ],
                 adminOnly: true,
             },
+
 
             // ✅ FINANCEIRO
             {
