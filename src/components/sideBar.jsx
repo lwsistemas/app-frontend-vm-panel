@@ -16,6 +16,8 @@ import {
     Receipt,
     CreditCard,
     LineChart,
+    Database,
+    LucideServerCog
 } from 'lucide-react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 
@@ -49,12 +51,14 @@ export default function Sidebar() {
             },
 
             {
-                key: 'storage',
-                label: 'Storage',
-                icon: <HardDrive size={16} />,
+                key: 'providers',
+                label: 'Providers/Servers',
+                icon: <Server size={16} />,
                 items: [
                     { to: '/ips', label: 'IPs', icon: <Activity size={16} /> },
+                    { to: '/inventory', label: 'Inventory DC', icon: <Database size={16} /> },
                     { to: '/templates', label: 'Templates', icon: <FileText size={16} /> },
+
                 ],
                 adminOnly: true,
             },

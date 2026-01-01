@@ -14,6 +14,8 @@ import MainLayout from './MainLayout.jsx';
 
 import ErrorBoundary from './components/ErrorBoundary';
 import NotFound from './pages/NotFound';
+import InventoryPage from './pages/InventoryDc/InventoryPage.jsx';
+
 
 export default function App() {
     return (
@@ -36,6 +38,16 @@ export default function App() {
 
                         {/* VMS */}
                         <Route path="/vms" element={<VmPage />} />
+
+                        <Route
+                            path="/inventory"
+                            element={
+                                <ProtectedRoute roles={['admin', 'root']}>
+                                    <InventoryPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
 
                         {/* 🔒 CREATE VM: ROOT / ADMIN / SUPPORT */}
                         <Route
