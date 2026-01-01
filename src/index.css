@@ -72,3 +72,54 @@
         @apply text-red-300 text-sm;
     }
 }
+
+/*em 01 01 2026*/
+
+/* =======================================================
+   GLOBAL RESET / BASE
+   ======================================================= */
+
+/* ===== Scrollbar (Chrome/Edge/Safari) ===== */
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.10);
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+/* ===== Scrollbar (Firefox) ===== */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) rgba(255, 255, 255, 0.03);
+}
+
+/* =======================================================
+   OPTIONAL: FIX PARA CONTAINERS COM SCROLL (melhor UX)
+   ======================================================= */
+
+/* para todos os containers com overflow-auto/scroll
+   melhora a rolagem em mobile */
+.overflow-auto,
+.overflow-y-auto,
+.overflow-scroll,
+.overflow-y-scroll {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* evita o scroll “prender” no final do container */
+.scroll-smooth {
+    scroll-behavior: smooth;
+}
