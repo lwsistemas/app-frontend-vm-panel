@@ -5,13 +5,21 @@ import {
     Activity,
     Search,
     RefreshCw,
-    Ban,
     CheckCircle2,
     Clock,
     ShieldCheck,
+    Filter,
+    ChevronDown,
+    ChevronUp,
+    ArrowUpDown,
+    Copy,
+    Server,
+    Link2,
+    X,
 } from "lucide-react";
 
 import PublicIpsApi from "../../services/publicIps";
+import SelectSearch from "../../components/SelectSearch";
 
 function cn(...arr) {
     return arr.filter(Boolean).join(" ");
@@ -21,9 +29,10 @@ function badge(status) {
     const base = "inline-flex items-center px-2 py-1 rounded-lg text-xs border";
     const s = String(status || "free").toLowerCase();
 
-    if (s === "assigned") return `${base} border-emerald-500/20 bg-emerald-500/10 text-emerald-300`;
-    if (s === "reserved") return `${base} border-sky-500/20 bg-sky-500/10 text-sky-300`;
-    if (s === "blocked") return `${base} border-rose-500/20 bg-rose-500/10 text-rose-300`;
+    if (s === "assigned")
+        return `${base} border-emerald-500/20 bg-emerald-500/10 text-emerald-300`;
+    if (s === "reserved")
+        return `${base} border-sky-500/20 bg-sky-500/10 text-sky-300`;
     return `${base} border-white/10 bg-white/5 text-slate-300`;
 }
 
@@ -45,16 +54,61 @@ function IconButton({ title, onClick, children, disabled }) {
     );
 }
 
+function Modal({ open, title, onClose, children }) {
+    if (!open) return null;
+
+    return (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <div
+                className="absolute inset-0 bg-black/60"
+                onClick={onClose}
+            />
+            <div className="relative w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-950 shadow-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-slate-100">{title}</div>
+                    <button
+                        className="w-9 h-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center"
+                        onClick={onClose}
+                    >
+                        <X size={16} className="text-slate-200" />
+                    </button>
+                </div>
+                <div className="p-4">{children}</div>
+            </div>
+        </div>
+    );
+}
+
 export default function PublicIpsPage() {
     const [loading, setLoading] = useState(false);
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 });
 
-    // filters
+    // filtros
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
+
     const [provider, setProvider] = useState("");
     const [dc, setDc] = useState("");
+    const [subnet, setSubnet] = useState("");
+    const [serverId, setServerId] = useState("");
+
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [vmIdFilter, setVmIdFilter] = useState("");
+    const [mac, setMac] = useState("");
+    const [externalId, setExternalId] = useState("");
+
+    // sort
+    const [sort, setSort] = useState("ip_address");
+    const [order, setOrder] = useState("asc");
+
+    const [filters, setFilters] = useState({
+        statuses: ["free", "reserved", "assigned"],
+        providers: [],
+        dcs: [],
+        subnets: [],
+        servers: [],
+    });
 
     const [page, setPage] = useState(1);
     const limit = 25;
@@ -68,10 +122,56 @@ export default function PublicIpsPage() {
     }, []);
     const isRoot = String(user?.role || "").toLowerCase() === "root";
 
+    // --- modal assign VM ---
+    const [vmModalOpen, setVmModalOpen] = useState(false);
+    const [vmModalIp, setVmModalIp] = useState(null);
+    const [vmSearch, setVmSearch] = useState("");
+    const [vmOptions, setVmOptions] = useState([]);
+    const [vmOptionsLoading, setVmOptionsLoading] = useState(false);
+
+    // stash selection per ip id
+    // selectedVmMap[ipId] = { id, label, ... }
+    const [selectedVmMap, setSelectedVmMap] = useState({});
+
+    function copy(txt) {
+        if (!txt) return;
+        navigator.clipboard.writeText(String(txt));
+    }
+
+    async function loadFilters() {
+        try {
+            const res = await PublicIpsApi.filters();
+            if (res?.ok) {
+                // public ips: sem blocked
+                const statuses = ["free", "reserved", "assigned"];
+                setFilters({ ...res.data, statuses });
+            }
+        } catch (err) {
+            console.warn("[PublicIpsPage] loadFilters warning:", err);
+        }
+    }
+
     async function load(p = 1) {
         setLoading(true);
         try {
-            const res = await PublicIpsApi.list({ search, status, provider, dc, page: p, limit });
+            const res = await PublicIpsApi.list({
+                search,
+                status,
+                provider,
+                dc,
+                subnet,
+                host_server_id: serverId || undefined,
+
+                vm_id: vmIdFilter || undefined,
+                mac: mac || undefined,
+                external_id: externalId || undefined,
+
+                sort,
+                order,
+                page: p,
+                limit,
+            });
+
             setRows(Array.isArray(res?.data) ? res.data : []);
             setMeta(res?.meta || { page: p, limit, total: 0, totalPages: 1 });
         } catch (err) {
@@ -83,19 +183,35 @@ export default function PublicIpsPage() {
         }
     }
 
+    function reloadFirstPage() {
+        setPage(1);
+        load(1);
+    }
+
     useEffect(() => {
+        loadFilters();
         load(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // debounce filtros
     useEffect(() => {
-        const t = setTimeout(() => {
-            setPage(1);
-            load(1);
-        }, 350);
+        const t = setTimeout(() => reloadFirstPage(), 350);
         return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search, status, provider, dc]);
+    }, [
+        search,
+        status,
+        provider,
+        dc,
+        subnet,
+        serverId,
+        vmIdFilter,
+        mac,
+        externalId,
+        sort,
+        order,
+    ]);
 
     function changePage(next) {
         const p = Math.max(1, Math.min(next, meta.totalPages || 1));
@@ -112,9 +228,63 @@ export default function PublicIpsPage() {
         }
     }
 
+    // ---- VM MODAL ----
+    function openVmModal(ipRow) {
+        setVmModalIp(ipRow);
+        setVmSearch("");
+        setVmOptions([]);
+        setVmModalOpen(true);
+    }
+
+    async function fetchVmOptions(q = "") {
+        setVmOptionsLoading(true);
+        try {
+            const res = await PublicIpsApi.vmOptions({ search: q, page: 1, limit: 25 });
+            if (res?.ok) setVmOptions(res.data || []);
+            else setVmOptions([]);
+        } catch (err) {
+            console.warn("[PublicIpsPage] vmOptions error:", err);
+            setVmOptions([]);
+        } finally {
+            setVmOptionsLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        if (!vmModalOpen) return;
+        const t = setTimeout(() => fetchVmOptions(vmSearch), 300);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vmSearch, vmModalOpen]);
+
+    function setSelectedVm(ipId, vm) {
+        setSelectedVmMap((prev) => ({
+            ...prev,
+            [String(ipId)]: vm ? { ...vm } : null,
+        }));
+    }
+
+    function getSelectedVm(ipId) {
+        return selectedVmMap[String(ipId)] || null;
+    }
+
+    async function saveVmAssign(ipRow) {
+        const sel = getSelectedVm(ipRow.id);
+
+        // se não selecionou nada: desassociar
+        if (!sel) {
+            const ok = confirm(`Remover VM do IP ${ipRow.ip_address}?`);
+            if (!ok) return;
+            return quickUpdate(ipRow.id, { vm_id: null, status: "free" });
+        }
+
+        // associar
+        return quickUpdate(ipRow.id, { vm_id: Number(sel.id), status: "assigned" });
+    }
+
     return (
         <div className="relative">
-            {/* Background / Gradient */}
+            {/* BG */}
             <div className="absolute inset-0 -z-10">
                 <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950 to-black" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.12),transparent_55%)]" />
@@ -131,7 +301,7 @@ export default function PublicIpsPage() {
                         <div>
                             <div className="text-lg font-semibold text-slate-100">Public IPs</div>
                             <div className="text-xs text-slate-500">
-                                IPs públicos do Datacenter/Provider (ReliableSite etc)
+                                IP público: free/reserved/assigned • VM via SELECT • server_id confiável
                             </div>
                         </div>
                     </div>
@@ -144,17 +314,17 @@ export default function PublicIpsPage() {
                 </div>
 
                 {/* Filters */}
-                <div className="rounded-2xl p-4 border border-white/10 bg-white/5">
+                <div className="rounded-2xl p-4 border border-white/10 bg-white/5 space-y-3">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                        <div className="md:col-span-5 relative">
+                        <div className="md:col-span-4 relative">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
                                 <Search size={16} />
                             </div>
                             <input
-                                className="w-full bg-black/30 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-sm text-slate-100"
-                                placeholder="Buscar por IP, gateway, subnet, mac..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Buscar por IP, gateway, subnet, mac..."
+                                className="w-full bg-black/30 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-sm text-slate-100"
                             />
                         </div>
 
@@ -165,33 +335,137 @@ export default function PublicIpsPage() {
                                 className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
                             >
                                 <option value="">status (all)</option>
-                                <option value="free">free</option>
-                                <option value="reserved">reserved</option>
-                                <option value="assigned">assigned</option>
-                                <option value="blocked">blocked</option>
+                                {filters.statuses.map((s) => (
+                                    <option key={s} value={s}>
+                                        {s}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
                         <div className="md:col-span-2">
-                            <input
-                                className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
-                                placeholder="provider"
+                            <SelectSearch
+                                items={filters.providers}
                                 value={provider}
-                                onChange={(e) => setProvider(e.target.value)}
+                                onChange={(v) => setProvider(v)}
+                                placeholder="provider"
+                                getLabel={(x) => x}
+                                getValue={(x) => x}
                             />
                         </div>
 
                         <div className="md:col-span-2">
-                            <input
-                                className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
-                                placeholder="dc"
+                            <SelectSearch
+                                items={filters.dcs}
                                 value={dc}
-                                onChange={(e) => setDc(e.target.value)}
+                                onChange={(v) => setDc(v)}
+                                placeholder="dc (server)"
+                                getLabel={(x) => x}
+                                getValue={(x) => x}
                             />
                         </div>
 
-                        <div className="md:col-span-1 flex items-center justify-end text-xs text-slate-500">
-                            {meta.total || 0}
+                        <button
+                            type="button"
+                            className={cn(
+                                "md:col-span-2 flex items-center justify-center gap-2 rounded-xl",
+                                "border border-white/10 bg-white/5 hover:bg-white/10 transition",
+                                "text-xs text-slate-300"
+                            )}
+                            onClick={() => setShowAdvanced((v) => !v)}
+                        >
+                            <Filter size={14} />
+                            Avançado
+                            {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-4">
+                            <SelectSearch
+                                items={filters.subnets}
+                                value={subnet}
+                                onChange={(v) => setSubnet(v)}
+                                placeholder="subnet"
+                                getLabel={(x) => x}
+                                getValue={(x) => x}
+                            />
+                        </div>
+
+                        <div className="md:col-span-8">
+                            <SelectSearch
+                                items={filters.servers || []}
+                                value={serverId}
+                                onChange={(v) => setServerId(v)}
+                                placeholder="Servidor físico (server_id)"
+                                getValue={(x) => String(x.id)}
+                                getLabel={(x) => `${x.label} • id:${x.id} • ${x.dc || "-"} • ${x.status || ""}`}
+                            />
+                        </div>
+                    </div>
+
+                    {showAdvanced ? (
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
+                            <div className="md:col-span-2">
+                                <input
+                                    value={vmIdFilter}
+                                    onChange={(e) => setVmIdFilter(e.target.value)}
+                                    placeholder="vm_id (filtro)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
+                                />
+                            </div>
+
+                            <div className="md:col-span-3">
+                                <input
+                                    value={mac}
+                                    onChange={(e) => setMac(e.target.value)}
+                                    placeholder="mac (exato)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
+                                />
+                            </div>
+
+                            <div className="md:col-span-3">
+                                <input
+                                    value={externalId}
+                                    onChange={(e) => setExternalId(e.target.value)}
+                                    placeholder="external_id (exato)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <select
+                                    value={sort}
+                                    onChange={(e) => setSort(e.target.value)}
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
+                                >
+                                    <option value="ip_address">sort: ip_address</option>
+                                    <option value="status">sort: status</option>
+                                    <option value="updated_at">sort: updated_at</option>
+                                    <option value="last_sync_at">sort: last_sync_at</option>
+                                </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <select
+                                    value={order}
+                                    onChange={(e) => setOrder(e.target.value)}
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl py-2 px-3 text-sm text-slate-100"
+                                >
+                                    <option value="asc">order: asc</option>
+                                    <option value="desc">order: desc</option>
+                                </select>
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <ArrowUpDown size={12} />
+                            Operador seleciona (provider/dc/subnet/server/vm)
+                        </div>
+                        <div>
+                            {meta.total || 0} itens • page {meta.page}/{meta.totalPages}
                         </div>
                     </div>
                 </div>
@@ -210,11 +484,10 @@ export default function PublicIpsPage() {
                             <thead className="text-xs text-slate-400 bg-black/20">
                             <tr>
                                 <th className="text-left px-4 py-2">IP</th>
-                                <th className="text-left px-4 py-2">Subnet</th>
-                                <th className="text-left px-4 py-2">Gateway</th>
-                                <th className="text-left px-4 py-2">MAC</th>
+                                <th className="text-left px-4 py-2">Subnet/GW</th>
                                 <th className="text-left px-4 py-2">Status</th>
-                                <th className="text-left px-4 py-2">VM</th>
+                                <th className="text-left px-4 py-2">Servidor</th>
+                                <th className="text-left px-4 py-2">VM (select)</th>
                                 <th className="text-right px-4 py-2">Ações</th>
                             </tr>
                             </thead>
@@ -222,77 +495,134 @@ export default function PublicIpsPage() {
                             <tbody className="divide-y divide-white/5">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-6 text-slate-400">Carregando...</td>
+                                    <td colSpan={6} className="px-4 py-6 text-slate-400">
+                                        Carregando...
+                                    </td>
                                 </tr>
                             ) : rows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-6 text-slate-400">Nenhum registro encontrado.</td>
+                                    <td colSpan={6} className="px-4 py-6 text-slate-400">
+                                        Nenhum registro.
+                                    </td>
                                 </tr>
                             ) : (
-                                rows.map((r) => (
-                                    <tr key={String(r.id)} className="hover:bg-white/5">
-                                        <td className="px-4 py-3 font-mono text-slate-100">{r.ip_address}</td>
-                                        <td className="px-4 py-3 text-slate-300 font-mono">{r.subnet || "-"}</td>
-                                        <td className="px-4 py-3 text-slate-300 font-mono">{r.gateway || "-"}</td>
-                                        <td className="px-4 py-3 text-slate-300 font-mono">{r.mac_address || "-"}</td>
-                                        <td className="px-4 py-3">
-                                            <span className={badge(r.status)}>{r.status || "free"}</span>
-                                        </td>
+                                rows.map((r) => {
+                                    const sel = getSelectedVm(r.id);
 
-                                        <td className="px-4 py-3">
-                                            <input
-                                                value={r.vm_id || ""}
-                                                onChange={(e) => {
-                                                    const v = e.target.value;
-                                                    setRows((prev) =>
-                                                        prev.map((x) => (x.id === r.id ? { ...x, vm_id: v } : x))
-                                                    );
-                                                }}
-                                                className="w-20 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-100"
-                                                placeholder="vm_id"
-                                            />
-                                        </td>
+                                    return (
+                                        <tr key={String(r.id)} className="hover:bg-white/5">
+                                            {/* IP */}
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono text-slate-100">{r.ip_address}</span>
+                                                    <IconButton title="Copiar IP" onClick={() => copy(r.ip_address)}>
+                                                        <Copy size={14} className="text-slate-200" />
+                                                    </IconButton>
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-mono">
+                                                    mac: {r.mac_address || "-"}
+                                                </div>
+                                            </td>
 
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="inline-flex items-center gap-2">
-                                                <IconButton
-                                                    title="Salvar (vm_id)"
-                                                    onClick={() =>
-                                                        quickUpdate(r.id, {
-                                                            vm_id: r.vm_id ? Number(r.vm_id) : null,
-                                                        })
-                                                    }
-                                                >
-                                                    <ShieldCheck size={16} className="text-slate-200" />
-                                                </IconButton>
+                                            {/* subnet/gw */}
+                                            <td className="px-4 py-3 text-slate-300">
+                                                <div className="font-mono">{r.subnet || "-"}</div>
+                                                <div className="text-xs text-slate-500 font-mono">
+                                                    gw: {r.gateway || "-"}
+                                                </div>
+                                            </td>
 
-                                                <IconButton
-                                                    title="Reservar"
-                                                    onClick={() => quickUpdate(r.id, { status: "reserved" })}
-                                                    disabled={String(r.status).toLowerCase() === "blocked"}
-                                                >
-                                                    <Clock size={16} className="text-slate-200" />
-                                                </IconButton>
+                                            {/* status */}
+                                            <td className="px-4 py-3">
+                                                <span className={badge(r.status)}>{r.status || "free"}</span>
+                                            </td>
 
-                                                <IconButton
-                                                    title="Liberar (free)"
-                                                    onClick={() => quickUpdate(r.id, { status: "free", vm_id: null })}
-                                                    disabled={String(r.status).toLowerCase() === "blocked"}
-                                                >
-                                                    <CheckCircle2 size={16} className="text-slate-200" />
-                                                </IconButton>
+                                            {/* server */}
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Server size={14} className="text-slate-400" />
+                                                    <div>
+                                                        <div className="text-slate-200 font-semibold">
+                                                            {r.server?.label || "-"}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">
+                                                            id: {r.host_server_id || r.server?.id || "-"} • {r.server?.dc || ""}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
 
-                                                <IconButton
-                                                    title={isRoot ? "Bloquear (ROOT)" : "Somente ROOT"}
-                                                    onClick={() => quickUpdate(r.id, { status: "blocked" })}
-                                                    disabled={!isRoot}
-                                                >
-                                                    <Ban size={16} className="text-slate-200" />
-                                                </IconButton>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+                                            {/* VM select */}
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col gap-2 min-w-[220px]">
+                                                    <div className="text-xs text-slate-400">
+                                                        Atual:{" "}
+                                                        <span className="text-slate-200">
+                                {r.vm_id ? `#${r.vm_id}` : "-"}
+                              </span>
+                                                    </div>
+
+                                                    {/* selection stash */}
+                                                    <button
+                                                        className="w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs text-slate-200"
+                                                        onClick={() => openVmModal(r)}
+                                                    >
+                              <span className="truncate">
+                                {sel ? sel.label : "Selecionar VM"}
+                              </span>
+                                                        <Link2 size={14} className="text-slate-400" />
+                                                    </button>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                            onClick={() => saveVmAssign(r)}
+                                                        >
+                                                            Salvar
+                                                        </button>
+
+                                                        <button
+                                                            className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                            onClick={() => setSelectedVm(r.id, null)}
+                                                        >
+                                                            Limpar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* actions */}
+                                            <td className="px-4 py-3 text-right">
+                                                <div className="inline-flex items-center gap-2">
+                                                    <IconButton
+                                                        title="Reservar"
+                                                        onClick={() => quickUpdate(r.id, { status: "reserved" })}
+                                                    >
+                                                        <Clock size={16} className="text-slate-200" />
+                                                    </IconButton>
+
+                                                    <IconButton
+                                                        title="Liberar (free)"
+                                                        onClick={() => quickUpdate(r.id, { status: "free", vm_id: null })}
+                                                    >
+                                                        <CheckCircle2 size={16} className="text-slate-200" />
+                                                    </IconButton>
+
+                                                    <IconButton
+                                                        title="Salvar notes/vm (se alterou)"
+                                                        onClick={() =>
+                                                            quickUpdate(r.id, {
+                                                                vm_id: r.vm_id ? Number(r.vm_id) : r.vm_id,
+                                                            })
+                                                        }
+                                                    >
+                                                        <ShieldCheck size={16} className="text-slate-200" />
+                                                    </IconButton>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                             </tbody>
                         </table>
@@ -303,29 +633,89 @@ export default function PublicIpsPage() {
                         <div className="text-xs text-slate-500">Total: {meta.total || 0}</div>
 
                         <div className="flex items-center gap-2">
-                            <button className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
-                                    onClick={() => changePage(1)} disabled={meta.page <= 1}>
+                            <button
+                                className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
+                                onClick={() => changePage(1)}
+                                disabled={meta.page <= 1}
+                            >
                                 {"<<"}
                             </button>
-                            <button className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
-                                    onClick={() => changePage(meta.page - 1)} disabled={meta.page <= 1}>
+                            <button
+                                className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
+                                onClick={() => changePage(meta.page - 1)}
+                                disabled={meta.page <= 1}
+                            >
                                 {"<"}
                             </button>
 
-                            <div className="text-xs text-slate-400 px-2">{meta.page} / {meta.totalPages}</div>
+                            <div className="text-xs text-slate-400 px-2">
+                                {meta.page} / {meta.totalPages}
+                            </div>
 
-                            <button className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
-                                    onClick={() => changePage(meta.page + 1)} disabled={meta.page >= meta.totalPages}>
+                            <button
+                                className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
+                                onClick={() => changePage(meta.page + 1)}
+                                disabled={meta.page >= meta.totalPages}
+                            >
                                 {">"}
                             </button>
-                            <button className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
-                                    onClick={() => changePage(meta.totalPages)} disabled={meta.page >= meta.totalPages}>
+                            <button
+                                className="px-3 py-1 rounded-lg border border-white/10 bg-white/5 text-slate-200 text-xs hover:bg-white/10"
+                                onClick={() => changePage(meta.totalPages)}
+                                disabled={meta.page >= meta.totalPages}
+                            >
                                 {">>"}
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* MODAL: Select VM */}
+            <Modal
+                open={vmModalOpen}
+                title={`Selecionar VM para IP ${vmModalIp?.ip_address || ""}`}
+                onClose={() => setVmModalOpen(false)}
+            >
+                <div className="space-y-3">
+                    <div className="text-xs text-slate-500">
+                        Busque pelo nome/hostname/provider_vm_id e selecione. Depois clique em <b>Salvar</b> na linha do IP.
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                        <div className="md:col-span-6 relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                                <Search size={16} />
+                            </div>
+                            <input
+                                value={vmSearch}
+                                onChange={(e) => setVmSearch(e.target.value)}
+                                placeholder="Buscar VM..."
+                                className="w-full bg-black/30 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-sm text-slate-100"
+                            />
+                        </div>
+
+                        <div className="md:col-span-6">
+                            <SelectSearch
+                                items={vmOptions}
+                                value={getSelectedVm(vmModalIp?.id)?.id || ""}
+                                onChange={(v, item) => {
+                                    if (!vmModalIp) return;
+                                    setSelectedVm(vmModalIp.id, item || null);
+                                }}
+                                placeholder={vmOptionsLoading ? "Carregando..." : "Selecionar VM"}
+                                getValue={(x) => String(x.id)}
+                                getLabel={(x) => x.label || `#${x.id} • ${x.name}`}
+                                menuPosition="relative"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="text-xs text-slate-500">
+                        {vmOptionsLoading ? "Buscando VMs..." : `${vmOptions.length} opções`}
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }
