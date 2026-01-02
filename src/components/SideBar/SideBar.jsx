@@ -1,4 +1,5 @@
 import SidebarGroup from "./SidebarGroup";
+import SidebarItem from "./SidebarItem";
 import { SIDEBAR_MENU } from "./sidebar.config";
 
 export default function Sidebar() {
@@ -12,13 +13,30 @@ export default function Sidebar() {
             </div>
 
             <nav className="p-3 overflow-y-auto">
-                {SIDEBAR_MENU.map((group) => (
-                    <SidebarGroup
-                        key={group.group}
-                        title={group.group}
-                        items={group.items}
-                    />
-                ))}
+                {SIDEBAR_MENU.map((entry, idx) => {
+                    // ✅ Caso 1: item direto (ex: Dashboard)
+                    if (entry?.to && entry?.label) {
+                        return (
+                            <div key={entry.to || `${entry.label}-${idx}`} className="mb-4">
+                                <SidebarItem {...entry} />
+                            </div>
+                        );
+                    }
+
+                    // ✅ Caso 2: grupo com items
+                    if (entry?.group && Array.isArray(entry.items)) {
+                        return (
+                            <SidebarGroup
+                                key={entry.group}
+                                title={entry.group}
+                                items={entry.items}
+                            />
+                        );
+                    }
+
+                    // ✅ Entrada inválida (evita render lixo)
+                    return null;
+                })}
             </nav>
         </aside>
     );
