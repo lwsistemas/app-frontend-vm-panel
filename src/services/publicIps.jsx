@@ -51,6 +51,20 @@ const PublicIpsApi = {
         const res = await api.patch(`/inventory/ips/${id}`, payload);
         return res.data;
     },
+
+    // ✅ NOVO: bulk genérico
+    // payload: { ids: [1,2,3], host_server_id?, status?, vm_id?, notes? }
+    async bulkUpdate(payload = {}) {
+        const res = await api.patch(`/inventory/ips/bulk`, payload);
+        return res.data;
+    },
+
+    // ✅ NOVO: atalho operacional (atribuir host em lote)
+    // ids: [1,2,3], host_server_id: number
+    async assignHostBulk(ids = [], host_server_id) {
+        const res = await api.post(`/inventory/ips/assign-host`, { ids, host_server_id });
+        return res.data;
+    },
 };
 
 export default PublicIpsApi;
