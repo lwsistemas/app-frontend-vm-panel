@@ -1,6 +1,6 @@
 // src/layouts/MainLayout.jsx
 import Header from './components/Header.jsx';
-import Sidebar from './components/sideBar.jsx';
+import Sidebar from './components/SideBar/SideBar.jsx';
 import {Outlet} from 'react-router-dom';
 import ConnectionFooter from "./components/ConnectionFooter.jsx";
 

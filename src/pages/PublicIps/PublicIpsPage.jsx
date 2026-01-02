@@ -154,6 +154,54 @@ export default function PublicIpsPage() {
 
     // ✅ toast simples
     const [toast, setToast] = useState(null);
+    // ✅ bulk selection
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkBusy, setBulkBusy] = useState(false);
+
+// modal bulk assign host
+    const [bulkHostModalOpen, setBulkHostModalOpen] = useState(false);
+    const [bulkHostId, setBulkHostId] = useState("");
+
+
+    function isSelected(id) {
+        return selectedIds.includes(Number(id));
+    }
+
+    function toggleSelect(id) {
+        const nid = Number(id);
+        setSelectedIds((prev) => prev.includes(nid) ? prev.filter((x) => x !== nid) : [...prev, nid]);
+    }
+
+    function shouldIgnoreRowClick(e) {
+        const el = e.target;
+        if (!el) return false;
+
+        // se clicou em um desses elementos, não marca/desmarca a linha
+        return !!el.closest(
+            'button, a, input, textarea, select, label, [role="button"], [data-no-row-select="true"]'
+        );
+    }
+
+
+    function clearSelection() {
+        setSelectedIds([]);
+    }
+
+    function selectAllCurrentPage() {
+        const ids = rows.map((r) => Number(r.id));
+        const allSelected = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+
+        if (allSelected) {
+            setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+        } else {
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
+        }
+    }
+
+    function onRowClick(e, id) {
+        if (shouldIgnoreRowClick(e)) return;
+        toggleSelect(id);
+    }
 
     function showToast(type, title, message) {
         setToast({type, title, message});
@@ -165,6 +213,53 @@ export default function PublicIpsPage() {
         navigator.clipboard.writeText(String(txt));
         showToast("success", "Copiado", "Valor copiado para a área de transferência");
     }
+
+    async function bulkReserve() {
+        if (!selectedIds.length) return;
+        setBulkBusy(true);
+        try {
+            await PublicIpsApi.bulkUpdate({ids: selectedIds, status: "reserved"});
+            clearSelection();
+            await load(page);
+        } catch (err) {
+            alert(err?.response?.data?.message || "Erro ao reservar IPs");
+        } finally {
+            setBulkBusy(false);
+        }
+    }
+
+    async function bulkFree() {
+        if (!selectedIds.length) return;
+        setBulkBusy(true);
+        try {
+            await PublicIpsApi.bulkUpdate({ids: selectedIds, status: "free", vm_id: null});
+            clearSelection();
+            await load(page);
+        } catch (err) {
+            alert(err?.response?.data?.message || "Erro ao liberar IPs");
+        } finally {
+            setBulkBusy(false);
+        }
+    }
+
+    async function bulkAssignHost() {
+        if (!selectedIds.length) return;
+        if (!bulkHostId) return alert("Selecione um Host/Servidor");
+
+        setBulkBusy(true);
+        try {
+            await PublicIpsApi.assignHostBulk(selectedIds, Number(bulkHostId));
+            setBulkHostModalOpen(false);
+            setBulkHostId("");
+            clearSelection();
+            await load(page);
+        } catch (err) {
+            alert(err?.response?.data?.message || "Erro ao atribuir Host em lote");
+        } finally {
+            setBulkBusy(false);
+        }
+    }
+
 
     async function loadFilters() {
         try {
@@ -559,9 +654,22 @@ export default function PublicIpsPage() {
                 </div>
 
                 <div className="overflow-auto">
+
                     <table className="w-full text-sm">
                         <thead className="text-xs text-slate-400 bg-blue-950/20">
                         <tr>
+                            {/* ✅ Checkbox header: seleciona todos da página */}
+                            <th className="text-left px-4 py-2 w-[46px]">
+                                <input
+                                    type="checkbox"
+                                    onChange={selectAllCurrentPage}
+                                    checked={rows.length > 0 && rows.every((r) => isSelected(r.id))}
+                                    disabled={bulkBusy || loading}
+                                    title="Selecionar todos desta tela"
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            </th>
+
                             <th className="text-left px-4 py-2">IP</th>
                             <th className="text-left px-4 py-2">Subnet/GW</th>
                             <th className="text-left px-4 py-2">Status</th>
@@ -572,162 +680,257 @@ export default function PublicIpsPage() {
                         </thead>
 
                         <tbody className="divide-y divide-white/5">
-                        {loading ? (<tr>
-                            <td colSpan={6} className="px-4 py-6 text-slate-400">
-                                Carregando...
-                            </td>
-                        </tr>) : rows.length === 0 ? (<tr>
-                            <td colSpan={6} className="px-4 py-6 text-slate-300">
-                                <div className="flex flex-col gap-2">
-                                    <div className="text-sm font-semibold text-slate-100">
-                                        Nenhum IP encontrado
-                                    </div>
-                                    <div className="text-xs text-slate-400">
-                                        Nenhum registro com os filtros atuais.
-                                        Tente ajustar os filtros ou limpar tudo.
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <button
-                                            className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                                            onClick={() => clearAllFilters()}
-                                        >
-                                            Limpar filtros
-                                        </button>
-                                        <button
-                                            className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                                            onClick={() => load(1)}
-                                        >
-                                            Tentar novamente
-                                        </button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>) : (rows.map((r) => {
-                            const sel = getSelectedVm(r.id);
-                            const reserved = String(r.status || "").toLowerCase() === "reserved";
-                            const dirty = isDirtyVm(r);
-
-                            return (<tr key={String(r.id)} className="border border-white/5 bg-gradient-to-r from-white/[0.02] via-white/[0.01] to-transparent hover:from-white/[0.04] hover:via-white/[0.02] transition"
-                            >
-                                {/* IP */}
-                                <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-mono text-slate-100">{r.ip_address}</span>
-                                        <IconButton title="Copiar IP" onClick={() => copy(r.ip_address)}>
-                                            <Copy size={14} className="text-slate-200"/>
-                                        </IconButton>
-                                    </div>
-                                    <div className="text-xs text-slate-500 font-mono">
-                                        mac: {r.mac_address || "-"}
-                                    </div>
-                                </td>
-
-                                {/* subnet/gw */}
-                                <td className="px-4 py-3 text-slate-300">
-                                    <div className="font-mono">{r.subnet || "-"}</div>
-                                    <div className="text-xs text-slate-500 font-mono">
-                                        gw: {r.gateway || "-"}
-                                    </div>
-                                </td>
-
-                                {/* status */}
-                                <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className={badge(r.status)}>{r.status || "free"}</span>
-                                        {dirty ? <span className={pendingBadge()}>Pendente</span> : null}
-                                    </div>
-                                </td>
-
-                                {/* server */}
-                                <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <Server size={14} className="text-slate-400"/>
-                                        <div>
-                                            <div className="text-slate-200 font-semibold">
-                                                {r.server?.label || "-"}
-                                            </div>
-                                            <div className="text-xs text-slate-500">
-                                                id: {r.host_server_id || r.server?.id || "-"} • {r.server?.dc || ""}
-                                            </div>
+                        {/* ✅ BULK BAR (HTML válido dentro da tabela) */}
+                        {selectedIds.length > 0 ? (
+                            <tr className="border-b border-white/10 bg-white/[0.03]">
+                                <td colSpan={7} className="px-4 py-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="text-xs text-slate-300">
+                                            <b>{selectedIds.length}</b> IPs selecionados
                                         </div>
-                                    </div>
-                                </td>
-
-                                {/* VM select */}
-                                <td className="px-4 py-3">
-                                    <div className="flex flex-col gap-2 min-w-[220px]">
-                                        <div className="text-xs text-slate-400">
-                                            Atual:{" "}
-                                            <span className="text-slate-200">
-                                                                {r.vm_id ? `#${r.vm_id}` : "-"}
-                                                            </span>
-                                        </div>
-
-                                        <button
-                                            className={cn("w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs text-slate-200", reserved && "opacity-40 cursor-not-allowed", dirty && "border-amber-500/20")}
-                                            onClick={() => openVmModal(r)}
-                                            disabled={reserved}
-                                            title={reserved ? "Reservado não pode atribuir VM" : "Selecionar VM"}
-                                        >
-                                                            <span className="truncate">
-                                                                {sel && sel !== null ? sel.label : "Selecionar VM"}
-                                                            </span>
-                                            <Link2 size={14} className="text-slate-400"/>
-                                        </button>
 
                                         <div className="flex items-center gap-2">
                                             <button
-                                                className={cn("px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200", (!dirty || reserved || savingId === r.id) && "opacity-40 cursor-not-allowed")}
-                                                disabled={!dirty || reserved || savingId === r.id}
-                                                onClick={() => saveVmAssign(r)}
-                                                title={!dirty ? "Sem alterações" : reserved ? "Reservado não pode salvar VM" : "Salvar alteração"}
+                                                className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                onClick={() => setBulkHostModalOpen(true)}
+                                                disabled={bulkBusy}
                                             >
-                                                {savingId === r.id ? "Salvando..." : "Salvar"}
+                                                Atribuir Host
                                             </button>
 
                                             <button
                                                 className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                                                onClick={() => clearSelectedVm(r.id)}
-                                                disabled={sel === undefined || savingId === r.id}
-                                                title="Cancelar seleção (não salva)"
+                                                onClick={bulkReserve}
+                                                disabled={bulkBusy}
                                             >
-                                                Cancelar seleção
+                                                Reservar
                                             </button>
 
                                             <button
                                                 className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
-                                                onClick={() => setSelectedVm(r.id, null)}
-                                                disabled={savingId === r.id}
-                                                title="Marcar para liberar (free) e depois salvar"
+                                                onClick={bulkFree}
+                                                disabled={bulkBusy}
                                             >
-                                                Marcar FREE
+                                                Liberar
+                                            </button>
+
+                                            <button
+                                                className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                onClick={clearSelection}
+                                                disabled={bulkBusy}
+                                            >
+                                                Limpar seleção
                                             </button>
                                         </div>
                                     </div>
                                 </td>
+                            </tr>
+                        ) : null}
 
-                                {/* actions */}
-                                <td className="px-4 py-3 text-right">
-                                    <div className="inline-flex items-center gap-2">
-                                        <IconButton
-                                            title="Reservar"
-                                            onClick={() => quickUpdate(r.id, {status: "reserved"})}
-                                            disabled={String(r.status || "").toLowerCase() === "reserved" || savingId === r.id}
-                                        >
-                                            <Clock size={16} className="text-slate-200"/>
-                                        </IconButton>
-
-                                        <IconButton
-                                            title="Liberar (free)"
-                                            onClick={() => quickUpdate(r.id, {status: "free", vm_id: null})}
-                                            disabled={savingId === r.id}
-                                        >
-                                            <CheckCircle2 size={16} className="text-slate-200"/>
-                                        </IconButton>
+                        {/* ✅ Loading */}
+                        {loading ? (
+                            <tr>
+                                <td colSpan={7} className="px-4 py-6 text-slate-400">
+                                    Carregando...
+                                </td>
+                            </tr>
+                        ) : rows.length === 0 ? (
+                            /* ✅ Empty */
+                            <tr>
+                                <td colSpan={7} className="px-4 py-6 text-slate-300">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="text-sm font-semibold text-slate-100">
+                                            Nenhum IP encontrado
+                                        </div>
+                                        <div className="text-xs text-slate-400">
+                                            Nenhum registro com os filtros atuais. Tente ajustar os filtros ou limpar tudo.
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <button
+                                                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                onClick={() => clearAllFilters()}
+                                            >
+                                                Limpar filtros
+                                            </button>
+                                            <button
+                                                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                onClick={() => load(1)}
+                                            >
+                                                Tentar novamente
+                                            </button>
+                                        </div>
                                     </div>
                                 </td>
-                            </tr>);
-                        }))}
+                            </tr>
+                        ) : (
+                            /* ✅ Rows */
+                            rows.map((r) => {
+                                const sel = getSelectedVm(r.id);
+                                const reserved = String(r.status || "").toLowerCase() === "reserved";
+                                const dirty = isDirtyVm(r);
+                                const selected = isSelected(r.id);
+
+                                return (
+                                    <tr
+                                        key={String(r.id)}
+                                        onClick={(e) => onRowClick(e, r.id)}
+                                        className={cn(
+                                            "border border-white/5 bg-gradient-to-r from-white/[0.02] via-white/[0.01] to-transparent",
+                                            "hover:from-white/[0.04] hover:via-white/[0.02] transition",
+                                            "cursor-pointer",
+                                            selected && "border-sky-500/20 bg-sky-500/[0.04]"
+                                        )}
+                                    >
+                                        {/* ✅ checkbox row */}
+                                        <td className="px-4 py-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() => toggleSelect(r.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                disabled={bulkBusy || loading}
+                                                title="Selecionar IP"
+                                            />
+                                        </td>
+
+                                        {/* IP */}
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-slate-100">{r.ip_address}</span>
+                                                <IconButton title="Copiar IP" onClick={() => copy(r.ip_address)}>
+                                                    <Copy size={14} className="text-slate-200" />
+                                                </IconButton>
+                                            </div>
+                                            <div className="text-xs text-slate-500 font-mono">
+                                                mac: {r.mac_address || "-"}
+                                            </div>
+                                        </td>
+
+                                        {/* subnet/gw */}
+                                        <td className="px-4 py-3 text-slate-300">
+                                            <div className="font-mono">{r.subnet || "-"}</div>
+                                            <div className="text-xs text-slate-500 font-mono">
+                                                gw: {r.gateway || "-"}
+                                            </div>
+                                        </td>
+
+                                        {/* status */}
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className={badge(r.status)}>{r.status || "free"}</span>
+                                                {dirty ? <span className={pendingBadge()}>Pendente</span> : null}
+                                            </div>
+                                        </td>
+
+                                        {/* server */}
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <Server size={14} className="text-slate-400" />
+                                                <div>
+                                                    <div className="text-slate-200 font-semibold">
+                                                        {r.server?.label || "-"}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500">
+                                                        id: {r.host_server_id || r.server?.id || "-"} • {r.server?.dc || ""}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {/* VM select */}
+                                        <td className="px-4 py-3">
+                                            <div className="flex flex-col gap-2 min-w-[220px]">
+                                                <div className="text-xs text-slate-400">
+                                                    Atual:{" "}
+                                                    <span className="text-slate-200">
+                    {r.vm_id ? `#${r.vm_id}` : "-"}
+                  </span>
+                                                </div>
+
+                                                <button
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs text-slate-200",
+                                                        reserved && "opacity-40 cursor-not-allowed",
+                                                        dirty && "border-amber-500/20"
+                                                    )}
+                                                    onClick={() => openVmModal(r)}
+                                                    disabled={reserved}
+                                                    title={reserved ? "Reservado não pode atribuir VM" : "Selecionar VM"}
+                                                >
+                  <span className="truncate">
+                    {sel?.label || "Selecionar VM"}
+                  </span>
+                                                    <Link2 size={14} className="text-slate-400" />
+                                                </button>
+
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        className={cn(
+                                                            "px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200",
+                                                            (!dirty || reserved || savingId === r.id) &&
+                                                            "opacity-40 cursor-not-allowed"
+                                                        )}
+                                                        disabled={!dirty || reserved || savingId === r.id}
+                                                        onClick={() => saveVmAssign(r)}
+                                                        title={
+                                                            !dirty
+                                                                ? "Sem alterações"
+                                                                : reserved
+                                                                    ? "Reservado não pode salvar VM"
+                                                                    : "Salvar alteração"
+                                                        }
+                                                    >
+                                                        {savingId === r.id ? "Salvando..." : "Salvar"}
+                                                    </button>
+
+                                                    <button
+                                                        className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                        onClick={() => clearSelectedVm(r.id)}
+                                                        disabled={sel === undefined || savingId === r.id}
+                                                        title="Cancelar seleção (não salva)"
+                                                    >
+                                                        Cancelar seleção
+                                                    </button>
+
+                                                    <button
+                                                        className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-200"
+                                                        onClick={() => setSelectedVm(r.id, null)}
+                                                        disabled={savingId === r.id}
+                                                        title="Marcar para liberar (free) e depois salvar"
+                                                    >
+                                                        Marcar FREE
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {/* actions */}
+                                        <td className="px-4 py-3 text-right">
+                                            <div className="inline-flex items-center gap-2">
+                                                <IconButton
+                                                    title="Reservar"
+                                                    onClick={() => quickUpdate(r.id, { status: "reserved" })}
+                                                    disabled={
+                                                        String(r.status || "").toLowerCase() === "reserved" ||
+                                                        savingId === r.id
+                                                    }
+                                                >
+                                                    <Clock size={16} className="text-slate-200" />
+                                                </IconButton>
+
+                                                <IconButton
+                                                    title="Liberar (free)"
+                                                    onClick={() => quickUpdate(r.id, { status: "free", vm_id: null })}
+                                                    disabled={savingId === r.id}
+                                                >
+                                                    <CheckCircle2 size={16} className="text-slate-200" />
+                                                </IconButton>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
                         </tbody>
                     </table>
                 </div>

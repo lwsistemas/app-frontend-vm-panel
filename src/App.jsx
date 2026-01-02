@@ -1,108 +1,80 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import {BrowserRouter, Routes, Route} from "react-router-dom";
 
-import Login from './pages/Login';
-import Register from './pages/Register'; // ✅ NEW
-import Dashboard from './pages/Dashboard';
-import VmDetail from './pages/VmDetail';
-import VmConsole from './pages/VmConsole';
-import VmPage from './pages/vm/VmPage';
-import VmCreatePage from './pages/vm/VmCreate.jsx';
-import UsersPage from './pages/Users/UsersPage';
+// Auth
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
-import ProtectedRoute from './components/ProtectedRoute';
-import MainLayout from './MainLayout.jsx';
+// Core
+import Dashboard from "./pages/Dashboard";
 
-import ErrorBoundary from './components/ErrorBoundary';
-import NotFound from './pages/NotFound';
-import InventoryPage from './pages/InventoryDc/InventoryPage.jsx';
-import InfraIps from './pages/InfraIps';
-import PublicIps from './pages/PublicIps';
+// VM
+import VmPage from "./pages/vm/VmPage";
+import VmCreatePage from "./pages/vm/VmCreate.jsx";
+import VmDetail from "./pages/VmDetail";
+import VmConsole from "./pages/VmConsole";
 
+// Users
+import UsersPage from "./pages/Users/UsersPage";
 
+// Invoices
+import InvoicesPage from "./pages/Invoices/InvoicesPage";
+import InvoiceDetailsPage from "./pages/Invoices/InvoiceDetailPage.jsx";
 
+// Inventory / Infra / IPs
+import InventoryPage from "./pages/InventoryDc/InventoryPage.jsx";
+import InfraIps from "./pages/InfraIps";
+import PublicIps from "./pages/PublicIps";
+
+// Layout / Guards
+import ProtectedRoute from "./components/ProtectedRoute";
+import MainLayout from "./MainLayout.jsx";
+
+// Utils
+import ErrorBoundary from "./components/ErrorBoundary";
+import NotFound from "./pages/NotFound";
 
 export default function App() {
-    return (
-        <BrowserRouter>
+    return (<BrowserRouter>
             <ErrorBoundary>
                 <Routes>
                     {/* PUBLIC */}
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} /> {/* ✅ NEW */}
+                    <Route path="/login" element={<Login/>}/>
+                    <Route path="/register" element={<Register/>}/>
 
-                    {/* PRIVATE (AUTH ONLY) */}
+                    {/* PROTECTED */}
                     <Route
-                        element={
-                            <ProtectedRoute>
-                                <MainLayout />
-                            </ProtectedRoute>
-                        }
+                        element={<ProtectedRoute>
+                            <MainLayout/>
+                        </ProtectedRoute>}
                     >
-                        <Route path="/" element={<Dashboard />} />
+                        {/* Dashboard */}
+                        <Route path="/" element={<Dashboard/>}/>
+                        <Route path="/dashboard" element={<Dashboard/>}/>
 
-                        {/* VMS */}
-                        <Route path="/vms" element={<VmPage />} />
+                        {/* VMs */}
+                        <Route path="/vms" element={<VmPage/>}/>
+                        <Route path="/vms/create" element={<VmCreatePage/>}/>
+                        <Route path="/vms/:id" element={<VmDetail/>}/>
+                        <Route path="/vms/:id/console" element={<VmConsole/>}/>
 
-                        <Route
-                            path="/inventory"
-                            element={
-                                <ProtectedRoute roles={['admin', 'root']}>
-                                    <InventoryPage />
-                                </ProtectedRoute>
-                            }
-                        />
+                        {/* Invoices */}
+                        <Route path="/invoices" element={<InvoicesPage/>}/>
+                        <Route path="/invoices/:id" element={<InvoiceDetailsPage/>}/>
 
-                        <Route
-                            path="/infra-ips"
-                            element={
-                                <ProtectedRoute roles={['admin', 'root']}>
-                                    <InfraIps />
-                                </ProtectedRoute>
-                            }
-                        />
+                        {/* Inventory DC */}
+                        <Route path="/inventory" element={<InventoryPage/>}/>
 
-                        <Route
-                            path="/public-ips"
-                            element={
-                                <ProtectedRoute roles={['admin', 'root']}>
-                                    <PublicIps />
-                                </ProtectedRoute>
-                            }
-                        />
+                        {/* IPs */}
+                        <Route path="/public-ips" element={<PublicIps/>}/>
+                        <Route path="/infra/ips" element={<InfraIps/>}/>
 
-
-
-                        {/* 🔒 CREATE VM: ROOT / ADMIN / SUPPORT */}
-                        <Route
-                            path="/vms/create"
-                            element={
-                                <ProtectedRoute roles={['root', 'admin', 'support']}>
-                                    <VmCreatePage />
-                                </ProtectedRoute>
-                            }
-                        />
-
-                        <Route path="/vm/:id" element={<VmDetail />} />
-                        <Route path="/vm/:id/console" element={<VmConsole />} />
-
-                        {/* 🔒 ADMIN / ROOT ONLY */}
-                        <Route
-                            path="/users"
-                            element={
-                                <ProtectedRoute roles={['admin', 'root']}>
-                                    <UsersPage />
-                                </ProtectedRoute>
-                            }
-                        />
-
-                        {/* ✅ 404 PRIVADO */}
-                        <Route path="*" element={<NotFound />} />
+                        {/* Users */}
+                        <Route path="/users" element={<UsersPage/>}/>
                     </Route>
 
-                    {/* ✅ 404 FORA (caso role rota louca antes do login) */}
-                    <Route path="*" element={<NotFound />} />
+                    {/* 404 */}
+                    <Route path="*" element={<NotFound/>}/>
                 </Routes>
             </ErrorBoundary>
-        </BrowserRouter>
-    );
+        </BrowserRouter>);
 }
