@@ -63,3 +63,10 @@ Use this phrase to resume exactly where we stopped:
 2) Open modal to select VM; dropdown opens correctly.
 3) Select VM, click Save on row: status should become assigned.
 4) Free action should null vm_id.
+
+### VM Select (Refinado por Owner)
+- SelectSearch de VM suporta busca por:
+  - VM: name/hostname/provider_vm_id/provider_vm_name
+  - Owner: name/email/login/document
+- Isso permite operar com milhares de VMs sem depender de memória do operador.
+
