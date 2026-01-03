@@ -15,14 +15,9 @@ import {
 
 export const SIDEBAR_MENU = [
     {
-        label: "Dashboard",
-        icon: LayoutDashboard,
-        to: "/dashboard",
-    },
-
-    {
         group: "Compute",
         items: [
+            { label: "Dashboard", icon: LayoutDashboard, to: "/dashboard" },
             { label: "VMs", icon: Server, to: "/vms" },
             { label: "Templates", icon: Boxes, to: "/templates", disabled: false },
             { label: "ISOs", icon: Boxes, to: "/isos", disabled: false },

@@ -6,20 +6,52 @@ import {
     Square,
     RotateCcw,
     Server,
-    Monitor,
+    ExternalLink,
     Loader2,
     UserPlus,
     CheckSquare,
-    Square as SquareIcon
-} from 'lucide-react';
+    Square as SquareIcon,
+    Power,
+    MoreVertical
+} from "lucide-react";
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
-import Swal from 'sweetalert2';
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
+import Swal from "sweetalert2";
 
-import api from '../../services';
-import useUsersSimple from '../../hooks/useUsersSimple';
+import api from "../../services";
+import useUsersSimple from "../../hooks/useUsersSimple";
+
+function cls(...arr) {
+    return arr.filter(Boolean).join(" ");
+}
+
+// 🔥 estilo padrão do toolbar (vCenter vibe)
+function IconBtn({ title, onClick, disabled, tone = "zinc", loading, children }) {
+    const map = {
+        zinc: "border-slate-800 bg-slate-950/40 hover:bg-white/5",
+        emerald: "border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15",
+        orange: "border-orange-500/25 bg-orange-500/10 hover:bg-orange-500/15",
+        red: "border-red-500/25 bg-red-500/10 hover:bg-red-500/15",
+        blue: "border-blue-500/25 bg-blue-500/10 hover:bg-blue-500/15",
+    };
+
+    return (
+        <button
+            title={title}
+            onClick={onClick}
+            disabled={disabled || loading}
+            className={cls(
+                "p-2 rounded-xl border transition flex items-center justify-center",
+                map[tone] || map.zinc,
+                (disabled || loading) ? "opacity-60 cursor-not-allowed" : ""
+            )}
+        >
+            {loading ? <Loader2 size={16} className="animate-spin text-slate-200" /> : children}
+        </button>
+    );
+}
 
 export default function VmCard({
                                    vm,
@@ -31,36 +63,28 @@ export default function VmCard({
                                    onToggleSelect = null,
                                }) {
     const navigate = useNavigate();
+    const [loadingAction, setLoadingAction] = useState(null);
+    const [hovered, setHovered] = useState(false);
+    const [showMore, setShowMore] = useState(false);
 
-    const [loading, setLoading] = useState(false);
-    const [showAssign, setShowAssign] = useState(false);
-    const [selectedUser, setSelectedUser] = useState('');
-
-    const { users, loading: loadingUsers } = useUsersSimple(showAssign);
-
-    const statusMap = {
-        POWERED_ON: { label: 'ONLINE', color: 'text-emerald-400', dot: 'bg-emerald-400' },
-        POWERED_OFF: { label: 'OFFLINE', color: 'text-slate-400', dot: 'bg-slate-400' },
-        RESTARTING: { label: 'PROCESSANDO', color: 'text-yellow-400', dot: 'bg-yellow-400' },
-        SUSPENDED: { label: 'SUSPENDED', color: 'text-orange-400', dot: 'bg-orange-400' },
-        UNKNOWN: { label: 'UNKNOWN', color: 'text-slate-500', dot: 'bg-slate-500' }
-    };
-
+    const { users, loading: loadingUsers } = useUsersSimple();
     const safeVm = vm || {};
-    const status = statusMap[safeVm.status] || statusMap.UNKNOWN;
-    const locked = safeVm.status === 'RESTARTING' || loading;
 
-    const canAssign =
-        currentUser?.role === 'root' ||
-        currentUser?.role === 'admin' ||
-        currentUser?.role === 'support';
+    const isSelected = useMemo(() => {
+        if (!onToggleSelect) return false;
+        return selectedIds.includes(safeVm.id);
+    }, [selectedIds, onToggleSelect, safeVm.id]);
 
-    // ✅ seleção só pra operador
-    const canSelect = canAssign && typeof onToggleSelect === 'function';
-    const isSelected = Array.isArray(selectedIds) && selectedIds.includes(safeVm.id);
+    const status = (safeVm.status || "UNKNOWN").toUpperCase();
 
-    function openDetails() {
-        if (!safeVm?.id) return;
+    const canStart = status === "POWERED_OFF";
+    const canStop = status === "POWERED_ON";
+    const canRestart = status === "POWERED_ON" || status === "SUSPENDED";
+
+    const locked = !!loadingAction;
+
+    function openVm() {
+        if (locked || !safeVm?.id) return;
         navigate(`/vm/${safeVm.id}`);
     }
 
@@ -69,233 +93,239 @@ export default function VmCard({
         if (locked || !safeVm?.id) return;
 
         const labels = {
-            start: 'Ligar',
-            stop: 'Desligar',
-            restart: 'Reiniciar'
+            start: "Ligar",
+            stop: "Desligar",
+            restart: "Reiniciar",
         };
 
-        const result = await Swal.fire({
-            title: `${labels[type]} VM`,
-            text: `Confirma ${labels[type].toLowerCase()} a VM "${safeVm.name}"?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: labels[type],
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#0ea5e9',
-        });
+        // ✅ start pode ser direto, mas mantém confirmação pra stop/restart
+        if (type !== "start") {
+            const result = await Swal.fire({
+                title: `${labels[type]} VM`,
+                text: `Confirma ${labels[type].toLowerCase()} a VM "${safeVm.name}"?`,
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: labels[type],
+                cancelButtonText: "Cancelar",
+            });
 
-        if (!result.isConfirmed) return;
+            if (!result.isConfirmed) return;
+        }
 
         try {
-            setLoading(true);
+            setLoadingAction(type);
             await api.post(`/vm/${safeVm.id}/${type}`);
             onChange?.();
+        } catch (err) {
+            console.error(err);
+            Swal.fire("Erro", `Falha ao executar ação: ${labels[type]}`, "error");
         } finally {
-            setLoading(false);
+            setLoadingAction(null);
         }
     }
 
-    async function assignVm() {
-        if (!selectedUser || !safeVm?.id) return;
-
-        const result = await Swal.fire({
-            title: 'Atribuir VM',
-            text: 'Confirma a mudança de dono desta VM?',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Confirmar',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#0ea5e9',
-        });
-
-        if (!result.isConfirmed) return;
-
-        await api.post(`/vm/${safeVm.id}/assign`, { user_id: selectedUser });
-        setShowAssign(false);
-        setSelectedUser('');
-        onChange?.();
+    function toggleSelect(e) {
+        e.stopPropagation();
+        if (!onToggleSelect || !safeVm?.id) return;
+        onToggleSelect(safeVm.id);
     }
 
+    // ✅ cor de status (badge)
+    const statusTone = useMemo(() => {
+        if (status === "POWERED_ON") return "emerald";
+        if (status === "POWERED_OFF") return "zinc";
+        if (status === "SUSPENDED") return "orange";
+        if (status === "DELETED") return "red";
+        return "zinc";
+    }, [status]);
+
+    const statusBadge = useMemo(() => {
+        const map = {
+            emerald: "border-emerald-500/25 bg-emerald-500/10 text-emerald-100",
+            zinc: "border-slate-800 bg-slate-950/60 text-slate-200",
+            orange: "border-orange-500/25 bg-orange-500/10 text-orange-100",
+            red: "border-red-500/25 bg-red-500/10 text-red-100",
+        };
+        return map[statusTone] || map.zinc;
+    }, [statusTone]);
+
+    // ✅ toolbar: aparece no hover ou selected
+    const showToolbar = hovered || isSelected;
+
     return (
-        <>
-            <div
-                onClick={openDetails}
-                className={`relative cursor-pointer rounded-xl
-                bg-gradient-to-b from-slate-900 to-slate-950
-                border p-5 transition
-                ${isSelected ? 'border-sky-600 shadow-lg shadow-sky-600/10' : 'border-slate-800 hover:border-sky-600 hover:shadow-lg hover:shadow-sky-600/10'}`}
-            >
-                {/* ✅ CHECKBOX (operador) */}
-                {canSelect && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleSelect?.(safeVm.id);
-                        }}
-                        className="absolute left-3 top-3 w-7 h-7 flex items-center justify-center rounded-lg
-                                   bg-slate-900/70 border border-slate-700 hover:border-sky-500 transition"
-                        title="Selecionar"
-                    >
-                        {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-sky-400" />
-                        ) : (
-                            <SquareIcon className="w-4 h-4 text-slate-400" />
-                        )}
-                    </button>
-                )}
-
-                {/* HEADER */}
-                <div className="flex justify-between mb-4 pl-6">
-                    <div>
-                        <h3 className="text-lg font-semibold flex gap-2">
-                            <Server className="w-5 h-5 text-sky-400" />
-                            {safeVm.name || '—'}
-                        </h3>
-
-                        <p className="text-xs text-slate-400 flex gap-2 mt-1">
-                            <Monitor className="w-4 h-4" />
-                            {safeVm.os || 'Sistema desconhecido'}
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                        <span className={`w-2 h-2 rounded-full ${status.dot}`} />
-                        <span className={status.color}>{status.label}</span>
-                    </div>
-                </div>
-
-                {/* INFO */}
-                <div className="space-y-2 text-xs text-slate-300">
-                    <InfoRow icon={<Cpu />} label="CPU" value={`${safeVm.cpu || 0} vCPU`} />
-                    <InfoRow icon={<MemoryStick />} label="Memória" value={`${safeVm.memory_mb || 0} MB`} />
-                    <InfoRow icon={<HardDrive />} label="Disco" value={`${safeVm.disk_gb || 0} GB`} />
-
-                    <div className="text-xs text-slate-500">
-                        IP: {safeVm.ip?.ip_address || 'Não atribuído'}
-                    </div>
-                </div>
-
-                {/* ACTIONS */}
-                <div className="mt-5 grid grid-cols-2 gap-3" onClick={e => e.stopPropagation()}>
-                    {safeVm.status === 'POWERED_ON' && (
-                        <>
-                            <ActionButton
-                                onClick={e => action(e, 'restart')}
-                                loading={loading}
-                                icon={<RotateCcw />}
-                                label="Restart"
-                                color="yellow"
-                            />
-                            <ActionButton
-                                onClick={e => action(e, 'stop')}
-                                loading={loading}
-                                icon={<Square />}
-                                label="Shutdown"
-                                color="red"
-                            />
-                        </>
-                    )}
-
-                    {(safeVm.status === 'POWERED_OFF' || safeVm.status === 'SUSPENDED' || safeVm.status === 'UNKNOWN') && (
-                        <ActionButton
-                            onClick={e => action(e, 'start')}
-                            loading={loading}
-                            icon={<Play />}
-                            label="Ligar"
-                            color="green"
-                            full
-                        />
-                    )}
-                </div>
-
-                {/* ASSIGN */}
-                {canAssign && (
-                    <div
-                        onClick={e => {
-                            e.stopPropagation();
-                            setShowAssign(true);
-                        }}
-                        className="mt-4 text-xs text-sky-400 hover:underline flex items-center gap-1"
-                    >
-                        <UserPlus className="w-3 h-3" />
-                        Atribuir VM
-                    </div>
-                )}
-            </div>
-
-            {/* MODAL ASSIGN */}
-            {showAssign &&
-                createPortal(
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999]">
-                        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-80 shadow-xl">
-                            <h3 className="text-sm font-semibold mb-4">Atribuir VM</h3>
-
-                            <select
-                                value={selectedUser}
-                                onChange={e => setSelectedUser(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm"
-                                disabled={loadingUsers}
-                            >
-                                <option value="">
-                                    {loadingUsers ? 'Carregando usuários...' : 'Selecione um usuário'}
-                                </option>
-
-                                {users.map(u => (
-                                    <option key={u.id} value={u.id}>
-                                        {u.name} ({u.role})
-                                    </option>
-                                ))}
-                            </select>
-
-                            <div className="flex justify-end gap-2 mt-5">
-                                <button
-                                    onClick={() => setShowAssign(false)}
-                                    className="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-xl"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={assignVm}
-                                    className="px-4 py-2 text-sm bg-sky-600 hover:bg-sky-500 rounded-xl font-semibold"
-                                >
-                                    Confirmar
-                                </button>
+        <div
+            onClick={openVm}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => {
+                setHovered(false);
+                setShowMore(false);
+            }}
+            className={cls(
+                "relative rounded-2xl border border-slate-800/70 overflow-hidden transition cursor-pointer",
+                "bg-gradient-to-b from-slate-950/70 to-slate-950/30 hover:bg-white/5",
+                isSelected ? "ring-2 ring-white/15" : ""
+            )}
+        >
+            {/* ✅ Header */}
+            <div className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <Server size={16} className="text-cyan-300/90" />
+                            <div className="text-sm font-semibold text-slate-100 truncate">
+                                {safeVm.name || `VM #${safeVm.id}`}
                             </div>
                         </div>
-                    </div>,
-                    document.body
-                )}
-        </>
-    );
-}
 
-function ActionButton({ onClick, loading, icon, label, color, full }) {
-    const colors = {
-        green: 'bg-emerald-600 hover:bg-emerald-700',
-        red: 'bg-red-600 hover:bg-red-700',
-        yellow: 'bg-amber-500 hover:bg-amber-400 text-black'
-    };
+                        <div className="text-xs text-slate-500 mt-1 truncate">
+                            {safeVm.guest_os || "—"} · {safeVm.cluster_name || "—"}
+                        </div>
+                    </div>
 
-    return (
-        <button
-            onClick={onClick}
-            className={`flex items-center justify-center gap-2 py-2 text-sm rounded-xl font-semibold transition
-            ${colors[color]} ${full ? 'col-span-2' : ''}`}
-        >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
-            {label}
-        </button>
-    );
-}
-
-function InfoRow({ icon, label, value }) {
-    return (
-        <div className="flex justify-between">
-            <span className="flex gap-2 text-slate-400 items-center">
-                <span className="w-4 h-4">{icon}</span>
-                {label}
+                    <div className="flex items-center gap-2">
+            <span className={cls("text-xs px-2 py-1 rounded-lg border", statusBadge)}>
+              {status === "POWERED_ON" ? "Online" :
+                  status === "POWERED_OFF" ? "Offline" :
+                      status === "SUSPENDED" ? "Suspended" :
+                          status === "DELETED" ? "Deleted" : "Unknown"}
             </span>
-            <span>{value}</span>
+                    </div>
+                </div>
+
+                {/* ✅ Specs */}
+                <div className="grid grid-cols-3 gap-3 mt-4">
+                    <div className="flex items-center gap-2">
+                        <Cpu size={16} className="text-slate-400" />
+                        <div className="text-xs text-slate-300">
+                            <div className="text-slate-500">CPU</div>
+                            <div>{safeVm.cpu || safeVm.vcpu || "—"} vCPU</div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <MemoryStick size={16} className="text-slate-400" />
+                        <div className="text-xs text-slate-300">
+                            <div className="text-slate-500">Memória</div>
+                            <div>{safeVm.ram_mb || safeVm.memory || "—"} MB</div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <HardDrive size={16} className="text-slate-400" />
+                        <div className="text-xs text-slate-300">
+                            <div className="text-slate-500">Disco</div>
+                            <div>{safeVm.disk_gb || safeVm.disk || "—"} GB</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ✅ Footer info */}
+                <div className="mt-4 flex items-center justify-between">
+                    <div className="text-xs text-slate-500 truncate">
+                        IP: {safeVm.ip_address || "Não atribuído"}
+                    </div>
+
+                    <div className="text-xs text-slate-500">
+                        {safeVm.last_sync_at ? `${safeVm.last_sync_at}` : ""}
+                    </div>
+                </div>
+            </div>
+
+            {/* ✅ Toolbar (vCenter vibe) */}
+            <div
+                className={cls(
+                    "absolute top-3 right-3 flex items-center gap-2 transition",
+                    showToolbar ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+                )}
+            >
+                {/* abrir */}
+                <IconBtn title="Abrir" tone="blue" onClick={(e) => { e.stopPropagation(); openVm(); }}>
+                    <ExternalLink size={16} className="text-blue-200" />
+                </IconBtn>
+
+                {/* power actions */}
+                <IconBtn
+                    title="Ligar"
+                    tone="emerald"
+                    disabled={!canStart}
+                    loading={loadingAction === "start"}
+                    onClick={(e) => action(e, "start")}
+                >
+                    <Play size={16} className="text-emerald-200" />
+                </IconBtn>
+
+                <IconBtn
+                    title="Desligar"
+                    tone="red"
+                    disabled={!canStop}
+                    loading={loadingAction === "stop"}
+                    onClick={(e) => action(e, "stop")}
+                >
+                    <Power size={16} className="text-red-200" />
+                </IconBtn>
+
+                <IconBtn
+                    title="Reiniciar"
+                    tone="orange"
+                    disabled={!canRestart}
+                    loading={loadingAction === "restart"}
+                    onClick={(e) => action(e, "restart")}
+                >
+                    <RotateCcw size={16} className="text-orange-200" />
+                </IconBtn>
+
+                {/* batch select */}
+                {onToggleSelect ? (
+                    <IconBtn
+                        title={isSelected ? "Desmarcar" : "Selecionar"}
+                        tone={isSelected ? "emerald" : "zinc"}
+                        onClick={toggleSelect}
+                    >
+                        {isSelected ? (
+                            <CheckSquare size={16} className="text-emerald-200" />
+                        ) : (
+                            <SquareIcon size={16} className="text-slate-300" />
+                        )}
+                    </IconBtn>
+                ) : null}
+
+                {/* more (placeholder) */}
+                <IconBtn
+                    title="Mais ações"
+                    tone="zinc"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMore(!showMore);
+                    }}
+                >
+                    <MoreVertical size={16} className="text-slate-200" />
+                </IconBtn>
+            </div>
+
+            {/* ✅ Mini menu (futuro: console, snapshot, etc) */}
+            {showMore ? (
+                <div
+                    className="absolute top-14 right-3 w-48 rounded-2xl border border-slate-800 bg-slate-950/90 backdrop-blur-md overflow-hidden z-20"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/5"
+                        onClick={() => navigate(`/vm/${safeVm.id}`)}
+                    >
+                        Abrir detalhes
+                    </button>
+
+                    <button
+                        className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/5"
+                        onClick={() => {
+                            Swal.fire("Info", "Console/Remote será plugado aqui.", "info");
+                            setShowMore(false);
+                        }}
+                    >
+                        Abrir Console (em breve)
+                    </button>
+                </div>
+            ) : null}
         </div>
     );
 }
