@@ -54,7 +54,7 @@ export default function App() {
                         {/* VMs */}
                         <Route path="/vms" element={<VmPage/>}/>
                         <Route path="/vms/create" element={<VmCreatePage/>}/>
-                        <Route path="/vms/:id" element={<VmDetail/>}/>
+                        <Route path="/vm/:id" element={<VmDetail/>}/>
                         <Route path="/vms/:id/console" element={<VmConsole/>}/>
 
                         {/* Invoices */}
