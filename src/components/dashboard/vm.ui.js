@@ -9,15 +9,19 @@ import { Server, Power, PauseCircle, HelpCircle } from "lucide-react";
  * - helpers: formatadores e safeText
  */
 
-export const STATUS_META = {
-    POWERED_ON: { label: "Online", tone: "emerald", icon: Server },
-    POWERED_OFF: { label: "Offline", tone: "slate", icon: Power },
-    SUSPENDED: { label: "Suspended", tone: "orange", icon: PauseCircle },
-    UNKNOWN: { label: "Unknown", tone: "zinc", icon: HelpCircle },
+const STATUS_META = {
+    POWERED_ON:  { label: "Online",    tone: "emerald", hint: "VMs ligadas" },
+    POWERED_OFF: { label: "Offline",   tone: "zinc",    hint: "VMs desligadas" },
+    SUSPENDED:   { label: "Suspended", tone: "orange",  hint: "VMs suspensas" },
+    UNKNOWN:     { label: "Unknown",   tone: "amber",   hint: "Sem status confiável" },
+    DELETED:     { label: "Deleted",   tone: "red",     hint: "Removidas do vCenter (histórico)" },
 };
 
+/**
+ * ✅ EXPORTADO AGORA
+ */
 export function getStatusMeta(status) {
-    return STATUS_META[status] || STATUS_META.UNKNOWN;
+    return STATUS_META[status] || { label: status, tone: "zinc", hint: "" };
 }
 
 /**
@@ -41,11 +45,12 @@ export const VM_UI = {
 export function badgeTone(tone) {
     const map = {
         emerald: "bg-emerald-500/18 text-emerald-200 border-emerald-500/28",
-        slate: "bg-slate-500/18 text-slate-200 border-slate-500/28",
-        orange: "bg-orange-500/18 text-orange-200 border-orange-500/28",
-        zinc: "bg-zinc-500/18 text-zinc-200 border-zinc-500/28",
-        blue: "bg-blue-500/18 text-blue-200 border-blue-500/28",
-        red: "bg-red-500/18 text-red-200 border-red-500/28",
+        slate:   "bg-slate-500/18 text-slate-200 border-slate-500/28",
+        orange:  "bg-orange-500/18 text-orange-200 border-orange-500/28",
+        zinc:    "bg-zinc-500/18 text-zinc-200 border-zinc-500/28",
+        blue:    "bg-blue-500/18 text-blue-200 border-blue-500/28",
+        red:     "bg-red-500/18 text-red-200 border-red-500/28",
+        amber:   "bg-amber-500/18 text-amber-200 border-amber-500/28",
     };
     return map[tone] || map.zinc;
 }
@@ -65,6 +70,8 @@ export function glowTone(tone) {
             "shadow-[0_0_0_1px_rgba(96,165,250,0.20),0_0_26px_rgba(96,165,250,0.14)]",
         red:
             "shadow-[0_0_0_1px_rgba(239,68,68,0.20),0_0_26px_rgba(239,68,68,0.14)]",
+        amber:
+            "shadow-[0_0_0_1px_rgba(245,158,11,0.20),0_0_26px_rgba(245,158,11,0.14)]",
     };
     return map[tone] || map.zinc;
 }

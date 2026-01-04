@@ -1,4 +1,4 @@
-import {BrowserRouter, Routes, Route} from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Auth
 import Login from "./pages/Login";
@@ -34,47 +34,57 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
-    return (<BrowserRouter>
+    return (
+        <BrowserRouter>
             <ErrorBoundary>
                 <Routes>
-                    {/* PUBLIC */}
-                    <Route path="/login" element={<Login/>}/>
-                    <Route path="/register" element={<Register/>}/>
+                    {/* ========================= */}
+                    {/* PUBLIC ROUTES */}
+                    {/* ========================= */}
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
 
-                    {/* PROTECTED */}
+                    {/* ========================= */}
+                    {/* PROTECTED ROUTES */}
+                    {/* ========================= */}
                     <Route
-                        element={<ProtectedRoute>
-                            <MainLayout/>
-                        </ProtectedRoute>}
+                        element={
+                            <ProtectedRoute>
+                                <MainLayout />
+                            </ProtectedRoute>
+                        }
                     >
                         {/* Dashboard */}
-                        <Route path="/" element={<Dashboard/>}/>
-                        <Route path="/dashboard" element={<Dashboard/>}/>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Dashboard />} />
 
                         {/* VMs */}
-                        <Route path="/vms" element={<VmPage/>}/>
-                        <Route path="/vms/create" element={<VmCreatePage/>}/>
-                        <Route path="/vm/:id" element={<VmDetail/>}/>
-                        <Route path="/vms/:id/console" element={<VmConsole/>}/>
+                        <Route path="/vms" element={<VmPage />} />
+                        <Route path="/vms/create" element={<VmCreatePage />} />
+                        <Route path="/vm/:id" element={<VmDetail />} />
+                        <Route path="/vms/:id/console" element={<VmConsole />} />
 
                         {/* Invoices */}
-                        <Route path="/invoices" element={<InvoicesPage/>}/>
-                        <Route path="/invoices/:id" element={<InvoiceDetailsPage/>}/>
+                        <Route path="/invoices" element={<InvoicesPage />} />
+                        <Route path="/invoices/:id" element={<InvoiceDetailsPage />} />
 
                         {/* Inventory DC */}
-                        <Route path="/inventory" element={<InventoryPage/>}/>
+                        <Route path="/inventory" element={<InventoryPage />} />
 
                         {/* IPs */}
-                        <Route path="/public-ips" element={<PublicIps/>}/>
-                        <Route path="/infra/ips" element={<InfraIps/>}/>
+                        <Route path="/public-ips" element={<PublicIps />} />
+                        <Route path="/infra/ips" element={<InfraIps />} />
 
                         {/* Users */}
-                        <Route path="/users" element={<UsersPage/>}/>
+                        <Route path="/users" element={<UsersPage />} />
                     </Route>
 
+                    {/* ========================= */}
                     {/* 404 */}
-                    <Route path="*" element={<NotFound/>}/>
+                    {/* ========================= */}
+                    <Route path="*" element={<NotFound />} />
                 </Routes>
             </ErrorBoundary>
-        </BrowserRouter>);
+        </BrowserRouter>
+    );
 }

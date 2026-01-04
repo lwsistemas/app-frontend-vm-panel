@@ -132,6 +132,45 @@ export default function VmDetail() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [acting, id]);
 
+
+    useEffect(() => {
+        async function runAction(action) {
+            try {
+                if (!id) return;
+
+                if (action === "start") await api.post(`/vm/${id}/start`);
+                if (action === "stop") await api.post(`/vm/${id}/stop`);
+                if (action === "restart") await api.post(`/vm/${id}/restart`);
+                if (action === "sync") await api.post(`/vm/${id}/sync`);
+
+                // avisa o Header que terminou com sucesso
+                window.dispatchEvent(new CustomEvent("vm:actionDone", {
+                    detail: { vmId: Number(id), action, ok: true }
+                }));
+
+                // se vc quiser forçar reload do detail local
+                // loadVmDetail();
+            } catch (e) {
+                console.log("[VM ACTION ERROR]", action, e?.message);
+
+                window.dispatchEvent(new CustomEvent("vm:actionDone", {
+                    detail: { vmId: Number(id), action, ok: false, error: e?.message || "Erro" }
+                }));
+            }
+        }
+
+        function onAction(e) {
+            const { vmId, action } = e?.detail || {};
+            if (!vmId || String(vmId) !== String(id)) return;
+            if (!action) return;
+            runAction(action);
+        }
+
+        window.addEventListener("vm:action", onAction);
+        return () => window.removeEventListener("vm:action", onAction);
+    }, [id]);
+
+
     /* ================= DERIVED ================= */
 
     const toolsOk = vm?.tools_status === "RUNNING";
