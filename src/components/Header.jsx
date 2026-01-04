@@ -645,7 +645,7 @@ export default function Header() {
     }, [isVmDetail, vmId, navigate, isPrivileged, location.pathname]);
 
     return (<header
-        className={cls("sticky top-0 z-40 border-b border-slate-800", "bg-gradient-to-b from-slate-950/92 via-slate-950/80 to-slate-950/65", "backdrop-blur-xl pl-[250px] lg:pl-[250px]")}
+        className={cls("sticky top-0 z-40 border-b border-slate-800", "bg-gradient-to-b from-slate-950/92 via-slate-950/80 to-slate-950/65", "backdrop-blur-xl")}
     >
         {/* linha viva */}
         <div className="h-[2px] w-full bg-gradient-to-r from-sky-500/0 via-sky-500/35 to-sky-500/0"/>
@@ -682,52 +682,28 @@ export default function Header() {
       {pageBlock.title}
     </span>
 
-                        {pageBlock.status ? (
-                            <span className="flex items-center gap-2 shrink-0">
+                        {pageBlock.status ? (<span className="flex items-center gap-2 shrink-0">
         {/* dot em telas menores */}
-                                <span
-                                    className={cls(
-                                        "inline-flex xl:hidden w-2 h-2 rounded-full",
-                                        pageBlock.tone === "emerald" && "bg-emerald-400",
-                                        pageBlock.tone === "amber" && "bg-amber-400",
-                                        pageBlock.tone === "red" && "bg-red-400",
-                                        pageBlock.tone === "slate" && "bg-slate-400"
-                                    )}
-                                    title={pageBlock.status}
-                                />
+                            <span
+                                className={cls("inline-flex xl:hidden w-2 h-2 rounded-full", pageBlock.tone === "emerald" && "bg-emerald-400", pageBlock.tone === "amber" && "bg-amber-400", pageBlock.tone === "red" && "bg-red-400", pageBlock.tone === "slate" && "bg-slate-400")}
+                                title={pageBlock.status}
+                            />
 
-                                {/* badge completo só no desktop */}
-                                <span
-                                    className={cls(
-                                        "hidden xl:inline-flex text-[10px] px-2 py-1 rounded-xl border whitespace-nowrap",
-                                        pageBlock.tone === "emerald" &&
-                                        "border-emerald-700/40 bg-emerald-900/10 text-emerald-200",
-                                        pageBlock.tone === "amber" &&
-                                        "border-amber-700/40 bg-amber-900/10 text-amber-200",
-                                        pageBlock.tone === "red" &&
-                                        "border-red-700/40 bg-red-900/10 text-red-200",
-                                        pageBlock.tone === "slate" &&
-                                        "border-slate-700/40 bg-slate-900/10 text-slate-200"
-                                    )}
-                                >
+                            {/* badge completo só no desktop */}
+                            <span
+                                className={cls("hidden xl:inline-flex text-[10px] px-2 py-1 rounded-xl border whitespace-nowrap", pageBlock.tone === "emerald" && "border-emerald-700/40 bg-emerald-900/10 text-emerald-200", pageBlock.tone === "amber" && "border-amber-700/40 bg-amber-900/10 text-amber-200", pageBlock.tone === "red" && "border-red-700/40 bg-red-900/10 text-red-200", pageBlock.tone === "slate" && "border-slate-700/40 bg-slate-900/10 text-slate-200")}
+                            >
           {pageBlock.status}
         </span>
-      </span>
-                        ) : null}
+      </span>) : null}
                     </div>
 
                     {/* Subtitle (1 linha no note / 2 linhas no desktop) */}
                     <div
-                        className={cls(
-                            "text-[11px] text-slate-400",
-                            "overflow-hidden text-ellipsis",
-                            "line-clamp-1 xl:line-clamp-2"
-                        )}
+                        className={cls("text-[11px] text-slate-400", "overflow-hidden text-ellipsis", "line-clamp-1 xl:line-clamp-2")}
                     >
                         {pageBlock.subtitle}
-                        {summaryErr ? (
-                            <span className="ml-2 text-red-400">({summaryErr})</span>
-                        ) : null}
+                        {summaryErr ? (<span className="ml-2 text-red-400">({summaryErr})</span>) : null}
                     </div>
                 </div>
 

@@ -9,11 +9,11 @@ export default function MainLayout() {
         <div className="flex min-h-screen bg-slate-950 text-slate-100">
             <Sidebar />
 
-            <div className="flex flex-col flex-1 min-h-screen">
+            <div className="flex flex-col flex-1 h-screen pl-[280px] overflow-hidden">
                 <Header />
 
                 {/* ✅ main cresce, mas respeita footer */}
-                <main className="flex-1 overflow-auto p-6 pl-[270px] lg:pl-[270px]">
+                <main className="flex-1 overflow-auto p-6">
                     <Outlet />
                 </main>
 
