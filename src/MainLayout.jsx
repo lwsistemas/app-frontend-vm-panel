@@ -13,7 +13,7 @@ export default function MainLayout() {
                 <Header />
 
                 {/* ✅ main cresce, mas respeita footer */}
-                <main className="flex-1 overflow-auto p-6">
+                <main className="flex-1 overflow-auto p-6 pl-[270px] lg:pl-[270px]">
                     <Outlet />
                 </main>
 

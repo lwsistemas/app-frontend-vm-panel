@@ -4,6 +4,10 @@ import VmList from '../../components/dashboard/VmList.jsx';
 import VmCard from '../../components/dashboard/VmCard.jsx';
 import VmFilters from '../../components/vm/VmFilters.jsx';
 
+import { Ban } from "lucide-react";
+import VmCancelRequestModal from "../../components/VmCancelRequestModal";
+import { canVm, whyVmDenied } from "../../utils/permissions";
+
 export default function VmPage() {
     const user = JSON.parse(localStorage.getItem('user'));
     const isAdmin = user?.role === 'admin' || user?.role === 'root';
@@ -38,6 +42,9 @@ export default function VmPage() {
 
     // ✅ seleção global (massa)
     const [selected, setSelected] = useState([]);
+    const [openCancel, setOpenCancel] = useState(false);
+
+    const canRequestCancel = canVm("cancel_request");
 
     const vmsSafe = useMemo(() => (Array.isArray(vms) ? vms.filter(Boolean) : []), [vms]);
 

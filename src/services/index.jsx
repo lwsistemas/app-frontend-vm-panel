@@ -16,14 +16,14 @@ import axios from 'axios';
  */
 
 const API_URLS = {
-    local: 'http://localhost:4430',
-    staging: 'http://179.181.104.169:4430',
+    local: 'http://172.16.11.4:4430',
+    staging: 'http://179.181.104.186:4430',
     production: 'https://api.control.lwsistemas.com.br',
 };
 
 // 🔧 Forçar ambiente manualmente (opcional)
 // const FORCE_MODE = import.meta.env.VITE_API_MODE || null;
-const FORCE_MODE = "local";
+const FORCE_MODE = "staging";
 
 
 

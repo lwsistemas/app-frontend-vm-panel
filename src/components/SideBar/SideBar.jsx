@@ -28,13 +28,13 @@ export default function SideBar() {
     });
 
     return (
-        <aside className="w-64 h-screen flex flex-col border-r border-white/10 bg-gradient-to-b from-slate-950 to-slate-900">
+        <aside className="w-64 h-screen flex flex-col border-r border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 fixed z-50 top-0 ">
             <div className="p-4 border-b border-white/10 shrink-0">
                 <div className="text-lg font-semibold text-white">VM Panel</div>
                 <div className="text-xs text-slate-400">Controle de Máquinas Virtuais</div>
             </div>
 
-            <nav className="p-3 flex-1 vm-sidebar-scroll">
+            <nav className="p-3 flex-1 vm-sidebar-scroll fix">
                 {menu.map((group) => (
                     <SidebarGroup key={group.group} group={group.group} items={group.items} />
                 ))}
