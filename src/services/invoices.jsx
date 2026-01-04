@@ -1,54 +1,59 @@
 // src/services/invoices.jsx
 import api from "../services";
 
-// LIST
-export async function listInvoices(params = {}) {
-    const { data } = await api.get("/invoices", { params });
-    return data;
-}
+const InvoicesApi = {
+    // LIST
+    list: async (params = {}) => {
+        const { data } = await api.get("/invoices", { params });
+        return data;
+    },
 
-// DETAIL
-export async function getInvoice(id) {
-    const { data } = await api.get(`/invoices/${id}`);
-    return data;
-}
+    // DETAIL
+    get: async (id) => {
+        const { data } = await api.get(`/invoices/${id}`);
+        return data;
+    },
 
-// UPDATE (se usar)
-export async function updateInvoice(id, payload) {
-    const { data } = await api.put(`/invoices/${id}`, payload);
-    return data;
-}
+    // UPDATE (se usar)
+    update: async (id, payload) => {
+        const { data } = await api.put(`/invoices/${id}`, payload);
+        return data;
+    },
 
-// STATUS (oficial)
-export async function setInvoiceStatus(id, status) {
-    const { data } = await api.patch(`/invoices/${id}/status`, { status });
-    return data;
-}
+    // STATUS (oficial)
+    setStatus: async (id, status) => {
+        const { data } = await api.patch(`/invoices/${id}/status`, { status });
+        return data;
+    },
 
-// ITEMS
-export async function addInvoiceItem(invoiceId, payload) {
-    const { data } = await api.post(`/invoices/${invoiceId}/items`, payload);
-    return data;
-}
+    // ITEMS
+    addItem: async (invoiceId, payload) => {
+        const { data } = await api.post(`/invoices/${invoiceId}/items`, payload);
+        return data;
+    },
 
-export async function updateInvoiceItem(invoiceId, itemId, payload) {
-    const { data } = await api.put(`/invoices/${invoiceId}/items/${itemId}`, payload);
-    return data;
-}
+    updateItem: async (invoiceId, itemId, payload) => {
+        const { data } = await api.put(`/invoices/${invoiceId}/items/${itemId}`, payload);
+        return data;
+    },
 
-export async function deleteInvoiceItem(invoiceId, itemId) {
-    const { data } = await api.delete(`/invoices/${invoiceId}/items/${itemId}`);
-    return data;
-}
+    deleteItem: async (invoiceId, itemId) => {
+        const { data } = await api.delete(`/invoices/${invoiceId}/items/${itemId}`);
+        return data;
+    },
 
-// PAYMENTS
-export async function listInvoicePayments(invoiceId) {
-    const { data } = await api.get(`/invoices/${invoiceId}/payments`);
-    return data;
-}
+    // PAYMENTS
+    listPayments: async (invoiceId) => {
+        const { data } = await api.get(`/invoices/${invoiceId}/payments`);
+        return data;
+    },
 
-export async function addInvoicePayment(invoiceId, payload) {
-    // payload mínimo: { amount, method, paid_at? }
-    const { data } = await api.post(`/invoices/${invoiceId}/payments`, payload);
-    return data;
-}
+    addPayment: async (invoiceId, payload) => {
+        // payload: { amount: number, method: string, reference?: string }
+        const { data } = await api.post(`/invoices/${invoiceId}/payments`, payload);
+        return data;
+    },
+
+};
+
+export default InvoicesApi;

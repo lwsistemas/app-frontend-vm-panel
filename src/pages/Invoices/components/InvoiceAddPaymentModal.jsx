@@ -1,7 +1,7 @@
 // src/pages/Invoices/components/InvoiceAddPaymentModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2 } from "lucide-react";
-import { addInvoicePayment } from "../../../services/invoices";
+import { addInvoicePayment } from "../../../services/invoices.jsx";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");

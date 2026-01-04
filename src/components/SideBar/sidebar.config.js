@@ -52,7 +52,7 @@ export const SIDEBAR_MENU = [
     {
         group: "Financeiro",
         items: [
-            { label: "Dashboard Financeiro", icon: FileText, to: "/finance/dashboard", disabled: false },
+            { label: "Dashboard Financeiro", icon: FileText, to: "/dashboard/finance", disabled: false },
             { label: "Invoices", icon: FileText, to: "/invoices", disabled: false },
             { label: "Payments", icon: CreditCard, to: "/finance/payments", disabled: false },
             { label: "Subscriptions", icon: FileText, to: "/finance/subscriptions", disabled: false },

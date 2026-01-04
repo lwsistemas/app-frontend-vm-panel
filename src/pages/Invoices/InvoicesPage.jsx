@@ -1,172 +1,275 @@
-import React, { useEffect, useState } from "react";
-import { FileText, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FileText, Search, RefreshCcw } from "lucide-react";
 import Swal from "sweetalert2";
 
-import { listInvoices } from "../../services/invoices";
+import InvoicesApi from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
-import InvoiceActions from "./components/InvoiceActions.jsx";
+
+function cls(...arr) {
+    return arr.filter(Boolean).join(" ");
+}
 
 export default function InvoicesPage() {
+    const navigate = useNavigate();
+
     const [loading, setLoading] = useState(false);
-    const [rows, setRows] = useState([]);
-    const [meta, setMeta] = useState({ page: 1, limit: 25, total: 0 });
+    const [items, setItems] = useState([]);
 
+    // filtros
     const [search, setSearch] = useState("");
-    const [status, setStatus] = useState("");
+    const [status, setStatus] = useState("all");
 
-    // debounce simples
-    const [debouncedSearch, setDebouncedSearch] = useState(search);
-    useEffect(() => {
-        const t = setTimeout(() => setDebouncedSearch(search), 300);
-        return () => clearTimeout(t);
-    }, [search]);
+    // paginação (contrato backend)
+    const [page, setPage] = useState(1);
+    const [limit] = useState(20);
+    const [meta, setMeta] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
 
-    async function load(page = 1) {
+    const queryParams = useMemo(() => {
+        const p = { page, limit };
+        if (search?.trim()) p.search = search.trim();
+        if (status !== "all") p.status = status;
+        return p;
+    }, [page, limit, search, status]);
+
+    async function load() {
         setLoading(true);
         try {
-            const res = await listInvoices({
-                page,
-                limit: meta.limit,
-                search: debouncedSearch,
-                status,
-            });
+            const res = await InvoicesApi.list(queryParams);
 
-            setRows(res.data || []);
-            setMeta(res.pagination || { ...meta, page });
+            // ✅ contrato: { ok, data, meta }
+            setItems(Array.isArray(res?.data) ? res.data : []);
+            setMeta(res?.meta || { page, limit, total: 0, pages: 1 });
         } catch (err) {
             console.error(err);
-            Swal.fire("Erro", "Erro ao carregar invoices", "error");
+            Swal.fire("Erro", "Falha ao carregar invoices", "error");
         } finally {
             setLoading(false);
         }
     }
 
     useEffect(() => {
-        load(1);
-        // eslint-disable-next-line
-    }, [debouncedSearch, status]);
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [queryParams]);
+
+    function goDetail(id) {
+        navigate(`/invoices/${id}`);
+    }
+
+    function prevPage() {
+        setPage((p) => Math.max(1, p - 1));
+    }
+
+    function nextPage() {
+        setPage((p) => Math.min(meta.pages || 1, p + 1));
+    }
 
     return (
-        <div className="p-6 space-y-4">
+        <div className="space-y-5">
             {/* Header */}
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <FileText size={18} />
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-2xl border border-white/10 bg-white/5">
+                        <FileText className="w-5 h-5 text-sky-300" />
+                    </div>
+                    <div>
+                        <div className="text-lg font-semibold text-slate-100">Invoices</div>
+                        <div className="text-xs text-slate-400">
+                            Controle financeiro, cobranças e histórico
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-lg font-semibold">Invoices</h1>
-                    <p className="text-xs text-slate-400">
-                        Controle financeiro • faturas emitidas
-                    </p>
-                </div>
+
+                <button
+                    onClick={load}
+                    className={cls(
+                        "px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold",
+                        loading ? "opacity-60 cursor-not-allowed" : ""
+                    )}
+                    disabled={loading}
+                >
+          <span className="flex items-center gap-2">
+            <RefreshCcw size={16} />
+            Atualizar
+          </span>
+                </button>
             </div>
 
             {/* Filters */}
-            <div className="flex gap-3 flex-wrap items-center">
-                <div className="relative">
-                    <Search
-                        className="absolute left-3 top-2.5 text-slate-400"
-                        size={14}
-                    />
-                    <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Buscar invoice..."
-                        className="pl-8 pr-3 py-2 text-sm rounded-xl bg-black/30 border border-white/10"
-                    />
-                </div>
+            <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-4">
+                <div className="flex flex-wrap gap-3 items-center">
+                    {/* Search */}
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-black/20 min-w-[260px] flex-1">
+                        <Search size={16} className="text-slate-400" />
+                        <input
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(1);
+                            }}
+                            className="bg-transparent outline-none text-sm text-slate-200 w-full"
+                            placeholder="Buscar por número, id, notas..."
+                        />
+                    </div>
 
-                <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="py-2 px-3 text-sm rounded-xl bg-black/30 border border-white/10"
-                >
-                    <option value="">Todos status</option>
-                    <option value="pending">Em aberto</option>
-                    <option value="paid">Paga</option>
-                    <option value="overdue">Vencida</option>
-                    <option value="canceled">Cancelada</option>
-                    <option value="refunded">Refund</option>
-                    <option value="draft">Draft</option>
-                </select>
-
-                {/* Pagination */}
-                <div className="ml-auto flex items-center gap-2">
-                    <button
-                        onClick={() => load(Math.max(meta.page - 1, 1))}
-                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                        disabled={loading || meta.page <= 1}
+                    {/* Status */}
+                    <select
+                        value={status}
+                        onChange={(e) => {
+                            setStatus(e.target.value);
+                            setPage(1);
+                        }}
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-black/20 text-sm text-slate-200 outline-none"
                     >
-                        Prev
-                    </button>
+                        <option value="all">Todos status</option>
+                        {/* ✅ status oficiais do backend */}
+                        <option value="pending">Pending</option>
+                        <option value="paid">Paid</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="canceled">Canceled</option>
+                        <option value="refunded">Refunded</option>
+                    </select>
 
-                    <span className="text-xs text-slate-400">
-            Page <span className="text-slate-200">{meta.page}</span>
-                        {" • "}
-                        Total <span className="text-slate-200">{meta.total}</span>
-          </span>
-
-                    <button
-                        onClick={() => load(meta.page + 1)}
-                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                        disabled={loading}
-                    >
-                        Next
-                    </button>
+                    {/* Meta */}
+                    <div className="text-xs text-slate-400 ml-auto">
+                        Total:{" "}
+                        <span className="text-slate-200 font-semibold">{meta.total}</span>
+                        {" · "}
+                        Página:{" "}
+                        <span className="text-slate-200 font-semibold">{meta.page}</span>/
+                        {meta.pages}
+                    </div>
                 </div>
             </div>
 
             {/* Table */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="text-xs text-slate-400 bg-black/20">
-                    <tr>
-                        <th className="px-4 py-2 text-left">Número</th>
-                        <th className="px-4 py-2 text-left">Cliente</th>
-                        <th className="px-4 py-2 text-left">Valor</th>
-                        <th className="px-4 py-2 text-left">Status</th>
-                        <th className="px-4 py-2 text-left">Vencimento</th>
-                        <th className="px-4 py-2 text-right">Ações</th>
-                    </tr>
-                    </thead>
+            <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 overflow-hidden">
+                <div className="overflow-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-black/20">
+                        <tr className="text-left text-xs text-slate-400">
+                            <th className="px-4 py-3">ID</th>
+                            <th className="px-4 py-3">Número</th>
+                            <th className="px-4 py-3">Cliente</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Total</th>
+                            <th className="px-4 py-3">Vencimento</th>
+                            <th className="px-4 py-3">Emissão</th>
+                            <th className="px-4 py-3">Criado</th>
+                            <th className="px-4 py-3 text-right">Ações</th>
+                        </tr>
+                        </thead>
 
-                    <tbody className="divide-y divide-white/5">
-                    {loading ? (
-                        <tr>
-                            <td colSpan={6} className="px-4 py-6 text-slate-400">
-                                Carregando...
-                            </td>
-                        </tr>
-                    ) : rows.length === 0 ? (
-                        <tr>
-                            <td colSpan={6} className="px-4 py-6 text-slate-400">
-                                Nenhuma invoice encontrada
-                            </td>
-                        </tr>
-                    ) : (
-                        rows.map((inv) => (
-                            <tr key={inv.id} className="hover:bg-white/5">
-                                <td className="px-4 py-3 font-mono">
-                                    {inv.number || `#${inv.id}`}
-                                </td>
-                                <td className="px-4 py-3">{inv.owner_name || "-"}</td>
-                                <td className="px-4 py-3 font-mono">
-                                    {inv.currency} {inv.total}
-                                </td>
-                                <td className="px-4 py-3">
-                                    <InvoiceStatusBadge status={inv.status} />
-                                </td>
-                                <td className="px-4 py-3 font-mono">
-                                    {inv.due_at ? String(inv.due_at).slice(0, 10) : "-"}
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                    <InvoiceActions invoice={inv} onRefresh={() => load(meta.page)} />
+                        <tbody>
+                        {loading ? (
+                            <tr>
+                                <td className="px-4 py-6 text-slate-400" colSpan={9}>
+                                    Carregando...
                                 </td>
                             </tr>
-                        ))
-                    )}
-                    </tbody>
-                </table>
+                        ) : items.length === 0 ? (
+                            <tr>
+                                <td className="px-4 py-6 text-slate-400" colSpan={9}>
+                                    Nenhuma invoice encontrada.
+                                </td>
+                            </tr>
+                        ) : (
+                            items.map((inv) => (
+                                <tr
+                                    key={inv.id}
+                                    className="border-t border-white/5 hover:bg-white/5 cursor-pointer"
+                                    onClick={() => goDetail(inv.id)}
+                                >
+                                    <td className="px-4 py-3 font-mono text-slate-200">
+                                        {inv.id}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-200 font-semibold">
+                                        {inv.number || "—"}
+                                    </td>
+
+                                    {/* ✅ Cliente */}
+                                    <td className="px-4 py-3">
+                                        <div className="min-w-0">
+                                            <div className="text-slate-200 font-semibold truncate max-w-[360px]">
+                                                {inv.customer?.name || `Owner #${inv.owner_id}`}
+                                            </div>
+                                            <div className="text-xs text-slate-500 truncate max-w-[360px]">
+                                                {inv.customer?.email || "—"}
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td className="px-4 py-3">
+                                        <InvoiceStatusBadge status={inv.status} />
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-200 font-semibold">
+                                        {inv.total} {inv.currency}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-300">
+                                        {inv.due_at ? new Date(inv.due_at).toLocaleDateString() : "—"}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-300">
+                                        {inv.issued_at ? new Date(inv.issued_at).toLocaleDateString() : "—"}
+                                    </td>
+
+                                    <td className="px-4 py-3 text-slate-500">
+                                        {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—"}
+                                    </td>
+
+                                    {/* ✅ botão dentro de TD (HTML válido) */}
+                                    <td className="px-4 py-3 text-right">
+                                        <button
+                                            className="text-sky-300 hover:underline"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                goDetail(inv.id);
+                                            }}
+                                        >
+                                            Ver
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-black/10">
+                    <button
+                        onClick={prevPage}
+                        disabled={page <= 1 || loading}
+                        className={cls(
+                            "px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold",
+                            page <= 1 || loading ? "opacity-50 cursor-not-allowed" : ""
+                        )}
+                    >
+                        Anterior
+                    </button>
+
+                    <div className="text-xs text-slate-400">
+                        Página{" "}
+                        <span className="text-slate-200 font-semibold">{meta.page}</span> de{" "}
+                        <span className="text-slate-200 font-semibold">{meta.pages}</span>
+                    </div>
+
+                    <button
+                        onClick={nextPage}
+                        disabled={page >= meta.pages || loading}
+                        className={cls(
+                            "px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold",
+                            page >= meta.pages || loading ? "opacity-50 cursor-not-allowed" : ""
+                        )}
+                    >
+                        Próxima
+                    </button>
+                </div>
             </div>
         </div>
     );

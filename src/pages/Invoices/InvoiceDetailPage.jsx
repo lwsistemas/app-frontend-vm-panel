@@ -1,40 +1,78 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
-import { ArrowLeft, RefreshCw, CreditCard, ReceiptText, ListChecks } from "lucide-react";
+import {
+    ArrowLeft,
+    FileText,
+    RefreshCcw,
+    Plus,
+    Copy,
+    ExternalLink,
+    CreditCard,
+    ClipboardList,
+    DollarSign,
+} from "lucide-react";
 
-import { getInvoice } from "../../services/invoices";
+import InvoicesApi from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
-
-// ✅ NOVO: actions + modal payment
-import InvoiceActions from "./components/InvoiceActions";
+import PaymentStatusBadge from "./PaymentStatusBadge";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
 }
 
-function money(currency, value) {
-    if (value === null || value === undefined) return `${currency} 0`;
-    return `${currency} ${Number(value).toFixed(2)}`;
+function fmtDate(d) {
+    if (!d) return "—";
+    try {
+        return new Date(d).toLocaleDateString();
+    } catch {
+        return "—";
+    }
 }
 
-function dateOnly(iso) {
-    if (!iso) return "-";
-    return String(iso).slice(0, 10);
+function fmtDateTime(d) {
+    if (!d) return "—";
+    try {
+        return new Date(d).toLocaleString();
+    } catch {
+        return "—";
+    }
 }
 
-export default function InvoiceDetailsPage() {
+function toMoneyString(value) {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "number") return value.toFixed(2);
+    return String(value);
+}
+
+function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+}
+
+export default function InvoiceDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
+
     const [invoice, setInvoice] = useState(null);
+    const [customer, setCustomer] = useState(null);
+    const [items, setItems] = useState([]);
+    const [payments, setPayments] = useState([]);
+    const [totals, setTotals] = useState(null);
+    const [permissions, setPermissions] = useState(null);
 
     async function load() {
         setLoading(true);
         try {
-            const res = await getInvoice().get(id);
-            setInvoice(res.data);
+            const res = await InvoicesApi.get(id);
+
+            setInvoice(res?.invoice || null);
+            setCustomer(res?.customer || null);
+            setItems(Array.isArray(res?.items) ? res.items : []);
+            setPayments(Array.isArray(res?.payments) ? res.payments : []);
+            setTotals(res?.totals || null);
+            setPermissions(res?.permissions || null);
         } catch (err) {
             console.error(err);
             Swal.fire("Erro", "Invoice não encontrada", "error");
@@ -46,279 +84,482 @@ export default function InvoiceDetailsPage() {
 
     useEffect(() => {
         load();
-        // eslint-disable-next-line
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
-    const payments = useMemo(() => {
-        // swagger: pode vir invoice.payments ou ser buscado separado
-        const arr = invoice?.payments || invoice?.invoice_payments || [];
-        return Array.isArray(arr) ? arr : [];
-    }, [invoice]);
+    const currency = invoice?.currency || "USD";
+    const canAddPayment = permissions?.can_add_payment === true;
 
-    const items = useMemo(() => {
-        const arr = invoice?.items || invoice?.invoice_items || [];
-        return Array.isArray(arr) ? arr : [];
-    }, [invoice]);
+    const progress = useMemo(() => {
+        const total = totals?.total ?? 0;
+        const paid = totals?.paid ?? 0;
+        if (!total) return 0;
+        return clamp((paid / total) * 100, 0, 100);
+    }, [totals]);
 
-    const paidTotal = useMemo(() => {
-        return payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    }, [payments]);
-
-    const remaining = useMemo(() => {
-        const total = Number(invoice?.total || 0);
-        return Math.max(total - paidTotal, 0);
-    }, [invoice, paidTotal]);
-
-    if (loading) {
-        return <div className="p-6 text-slate-400">Carregando invoice...</div>;
+    async function copyToClipboard(text, label = "Copiado") {
+        try {
+            await navigator.clipboard.writeText(text);
+            Swal.fire({
+                toast: true,
+                position: "top-end",
+                icon: "success",
+                title: label,
+                showConfirmButton: false,
+                timer: 1600,
+            });
+        } catch (err) {
+            console.error(err);
+            Swal.fire("Erro", "Não foi possível copiar", "error");
+        }
     }
 
-    if (!invoice) return null;
+    async function addPayment() {
+        const { value } = await Swal.fire({
+            title: "Adicionar pagamento",
+            html: `
+        <input id="amount" class="swal2-input" placeholder="Valor (ex: 10.00)">
+        <input id="method" class="swal2-input" placeholder="Método (pix|card|boleto|manual)">
+        <input id="reference" class="swal2-input" placeholder="Reference (txid/nsu/opcional)">
+      `,
+            focusConfirm: false,
+            showCancelButton: true,
+            confirmButtonText: "Salvar",
+            cancelButtonText: "Cancelar",
+            preConfirm: () => {
+                const amountRaw = document.getElementById("amount").value;
+                const method = document.getElementById("method").value;
+                const reference = document.getElementById("reference").value;
+
+                if (!amountRaw || !method) {
+                    Swal.showValidationMessage("Informe valor e método");
+                    return null;
+                }
+
+                const amount = Number(amountRaw);
+                if (Number.isNaN(amount) || amount <= 0) {
+                    Swal.showValidationMessage("Valor inválido");
+                    return null;
+                }
+
+                return {
+                    amount, // ✅ swagger: number
+                    method: String(method).trim(),
+                    reference: reference ? String(reference).trim() : undefined,
+                };
+            },
+        });
+
+        if (!value) return;
+
+        try {
+            await InvoicesApi.addPayment(id, value);
+            Swal.fire("OK", "Pagamento registrado", "success");
+            await load();
+        } catch (err) {
+            console.error(err);
+            Swal.fire("Erro", "Falha ao adicionar pagamento", "error");
+        }
+    }
+
+    if (loading) return <div className="p-6 text-slate-400">Carregando invoice...</div>;
+    if (!invoice) return <div className="p-6 text-slate-400">Invoice não encontrada.</div>;
 
     return (
-        <div className="p-6 space-y-4">
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                <div className="flex items-center gap-3">
+        <div className="space-y-5">
+            {/* HEADER */}
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
                     <button
-                        onClick={() => navigate("/invoices")}
-                        className="w-9 h-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center"
+                        onClick={() => navigate(-1)}
+                        className="p-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10"
                         title="Voltar"
                     >
                         <ArrowLeft size={16} />
                     </button>
 
-                    <div>
-                        <div className="text-lg font-semibold text-slate-100">
-                            Invoice {invoice.number || `#${invoice.id}`}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                            Detalhe da fatura · ID {invoice.id}
-                        </div>
+                    <div className="p-3 rounded-2xl border border-white/10 bg-white/5 shrink-0">
+                        <FileText className="w-5 h-5 text-sky-300" />
                     </div>
 
-                    <div className="ml-2">
-                        <InvoiceStatusBadge status={invoice.status} />
+                    <div className="min-w-0">
+                        <div className="text-lg font-semibold text-slate-100 flex items-center gap-3 min-w-0">
+                            <span className="truncate">{invoice.number || `Invoice #${invoice.id}`}</span>
+                            <InvoiceStatusBadge status={invoice.status} />
+                        </div>
+
+                        <div className="text-xs text-slate-400 flex flex-wrap gap-2">
+              <span>
+                Cliente:{" "}
+                  <span className="text-slate-200 font-semibold">
+                  {customer?.name || `Owner #${invoice.owner_id}`}
+                </span>
+              </span>
+
+                            {customer?.email ? (
+                                <>
+                                    <span className="opacity-50">•</span>
+                                    <span className="text-slate-400">{customer.email}</span>
+                                </>
+                            ) : null}
+
+                            <span className="opacity-50">•</span>
+
+                            <span>
+                Total:{" "}
+                                <span className="text-slate-200 font-semibold">
+                  {toMoneyString(invoice.total)} {currency}
+                </span>
+              </span>
+
+                            <span className="opacity-50">•</span>
+
+                            <span>
+                Due:{" "}
+                                <span className="text-slate-200 font-semibold">
+                  {fmtDate(invoice.due_at)}
+                </span>
+              </span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {/* ✅ Actions oficiais */}
-                    <InvoiceActions invoice={invoice} onRefresh={load} />
-
+                {/* ACTIONS */}
+                <div className="flex items-center gap-2">
                     <button
                         onClick={load}
-                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm flex items-center gap-2"
-                        title="Atualizar"
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
                     >
-                        <RefreshCw size={16} />
-                        Atualizar
+            <span className="flex items-center gap-2">
+              <RefreshCcw size={16} />
+              Atualizar
+            </span>
+                    </button>
+
+                    <button
+                        onClick={addPayment}
+                        disabled={!canAddPayment}
+                        className={cls(
+                            "px-3 py-2 rounded-xl border text-sm font-semibold",
+                            canAddPayment
+                                ? "border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/15 text-emerald-200"
+                                : "border-white/10 bg-white/5 text-slate-500 opacity-60 cursor-not-allowed"
+                        )}
+                        title={!canAddPayment ? "Sem permissão para adicionar pagamento" : "Adicionar pagamento"}
+                    >
+            <span className="flex items-center gap-2">
+              <Plus size={16} />
+              Add Payment
+            </span>
                     </button>
                 </div>
             </div>
 
             {/* KPI STRIP */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs text-slate-400">Total</div>
-                    <div className="mt-2 text-2xl font-semibold text-slate-100">
-                        {money(invoice.currency, invoice.total)}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card title="Total" icon={<DollarSign size={16} className="text-sky-300" />}>
+                    <div className="text-2xl font-bold text-slate-100">
+                        {toMoneyString(invoice.total)}{" "}
+                        <span className="text-sm text-slate-400 font-semibold">{currency}</span>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                        Emitida: <span className="text-slate-300 font-mono">{dateOnly(invoice.issued_at)}</span>
+                    <div className="text-xs text-slate-400 mt-1">
+                        Subtotal:{" "}
+                        <span className="text-slate-200 font-semibold">
+              {toMoneyString(invoice.subtotal)}
+            </span>
                     </div>
-                </div>
+                </Card>
 
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs text-slate-400">Pago</div>
-                    <div className="mt-2 text-2xl font-semibold text-emerald-200">
-                        {money(invoice.currency, paidTotal)}
+                <Card title="Paid" icon={<CreditCard size={16} className="text-emerald-300" />}>
+                    <div className="text-2xl font-bold text-slate-100">
+                        {toMoneyString(totals?.paid ?? 0)}{" "}
+                        <span className="text-sm text-slate-400 font-semibold">{currency}</span>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                        Pagamentos: <span className="text-slate-300">{payments.length}</span>
-                    </div>
-                </div>
+                    <div className="text-xs text-slate-400 mt-1">Pagamentos confirmados</div>
+                </Card>
 
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs text-slate-400">Restante</div>
-                    <div className={cls("mt-2 text-2xl font-semibold", remaining > 0 ? "text-orange-200" : "text-slate-100")}>
-                        {money(invoice.currency, remaining)}
+                <Card title="Due" icon={<CreditCard size={16} className="text-amber-300" />}>
+                    <div className="text-2xl font-bold text-slate-100">
+                        {toMoneyString(totals?.due ?? 0)}{" "}
+                        <span className="text-sm text-slate-400 font-semibold">{currency}</span>
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                        Vencimento: <span className="text-slate-300 font-mono">{dateOnly(invoice.due_at)}</span>
+                    <div className="text-xs text-slate-400 mt-1">Saldo em aberto</div>
+                </Card>
+
+                <Card title="Timeline" icon={<FileText size={16} className="text-slate-300" />}>
+                    <div className="text-sm text-slate-200 font-semibold">
+                        Issued:{" "}
+                        <span className="text-slate-400 font-normal">{fmtDate(invoice.issued_at)}</span>
                     </div>
-                </div>
+                    <div className="text-sm text-slate-200 font-semibold mt-1">
+                        Due:{" "}
+                        <span className="text-slate-400 font-normal">{fmtDate(invoice.due_at)}</span>
+                    </div>
+                    <div className="text-sm text-slate-200 font-semibold mt-1">
+                        Paid:{" "}
+                        <span className="text-slate-400 font-normal">{fmtDate(invoice.paid_at)}</span>
+                    </div>
+                </Card>
             </div>
 
-            {/* Body */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                {/* LEFT */}
-                <div className="xl:col-span-2 space-y-4">
-                    {/* CLIENT / META */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
-                        <div className="flex items-center gap-2 text-slate-200">
-                            <ReceiptText size={18} className="text-slate-300" />
-                            <span className="text-sm font-semibold">Dados</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>
-                                <div className="text-xs text-slate-400">Cliente</div>
-                                <div className="text-slate-100">{invoice.owner_name || "-"}</div>
-                            </div>
-
-                            <div>
-                                <div className="text-xs text-slate-400">Moeda</div>
-                                <div className="text-slate-100 font-mono">{invoice.currency || "-"}</div>
-                            </div>
-
-                            <div>
-                                <div className="text-xs text-slate-400">Emitida</div>
-                                <div className="text-slate-100 font-mono">{dateOnly(invoice.issued_at)}</div>
-                            </div>
-
-                            <div>
-                                <div className="text-xs text-slate-400">Vencimento</div>
-                                <div className="text-slate-100 font-mono">{dateOnly(invoice.due_at)}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ITEMS */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        <div className="flex items-center gap-2 text-slate-200 mb-3">
-                            <ListChecks size={18} className="text-slate-300" />
-                            <span className="text-sm font-semibold">Items</span>
-                            <span className="text-xs text-slate-500 ml-2">({items.length})</span>
-                        </div>
-
-                        {items.length === 0 ? (
-                            <div className="text-xs text-slate-500">Sem items.</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="text-slate-400">
-                                    <tr className="border-b border-white/10">
-                                        <th className="text-left py-2 pr-3">Descrição</th>
-                                        <th className="text-right py-2 pr-3">Qtd</th>
-                                        <th className="text-right py-2 pr-3">Preço</th>
-                                        <th className="text-right py-2">Total</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {items.map((it) => (
-                                        <tr key={it.id} className="border-b border-white/5 hover:bg-white/5 transition">
-                                            <td className="py-3 pr-3 text-slate-100">
-                                                {it.description || it.name || "-"}
-                                                {it.sku ? (
-                                                    <div className="text-xs text-slate-500 font-mono mt-1">{it.sku}</div>
-                                                ) : null}
-                                            </td>
-                                            <td className="py-3 pr-3 text-right text-slate-300 font-mono">
-                                                {Number(it.qty || it.quantity || 1)}
-                                            </td>
-                                            <td className="py-3 pr-3 text-right text-slate-300 font-mono">
-                                                {money(invoice.currency, it.unit_price || it.price || 0)}
-                                            </td>
-                                            <td className="py-3 text-right text-slate-100 font-mono">
-                                                {money(invoice.currency, it.total || (Number(it.unit_price || it.price || 0) * Number(it.qty || it.quantity || 1)))}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* PAYMENTS */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        <div className="flex items-center gap-2 text-slate-200 mb-3">
-                            <CreditCard size={18} className="text-slate-300" />
-                            <span className="text-sm font-semibold">Payments</span>
-                            <span className="text-xs text-slate-500 ml-2">({payments.length})</span>
-                        </div>
-
-                        {payments.length === 0 ? (
-                            <div className="text-xs text-slate-500">Nenhum pagamento registrado.</div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="text-slate-400">
-                                    <tr className="border-b border-white/10">
-                                        <th className="text-left py-2 pr-3">Método</th>
-                                        <th className="text-left py-2 pr-3">Gateway</th>
-                                        <th className="text-left py-2 pr-3">TXID</th>
-                                        <th className="text-left py-2 pr-3">Pago em</th>
-                                        <th className="text-right py-2">Valor</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    {payments.map((p) => (
-                                        <tr key={p.id} className="border-b border-white/5 hover:bg-white/5 transition">
-                                            <td className="py-3 pr-3 text-slate-100">{p.method || "manual"}</td>
-                                            <td className="py-3 pr-3 text-slate-300">{p.gateway || "-"}</td>
-                                            <td className="py-3 pr-3 text-slate-300 font-mono">{p.txid || "-"}</td>
-                                            <td className="py-3 pr-3 text-slate-300 font-mono">{dateOnly(p.paid_at || p.createdAt)}</td>
-                                            <td className="py-3 text-right text-slate-100 font-mono">
-                                                {money(invoice.currency, p.amount)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
+            {/* PROGRESS */}
+            <Card title="Progress (Paid / Total)">
+                <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <span>Pago</span>
+                    <span className="text-slate-200 font-semibold">{progress.toFixed(0)}%</span>
                 </div>
+                <div className="h-3 rounded-full bg-black/30 border border-white/10 overflow-hidden">
+                    <div
+                        className="h-full bg-gradient-to-r from-emerald-500/70 to-sky-500/70"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+            </Card>
 
-                {/* RIGHT */}
-                <div className="space-y-4">
-                    {/* TOTALS */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-                        <div className="text-sm font-semibold text-slate-100">Totais</div>
-
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-300">Subtotal</span>
-                            <span className="font-mono text-slate-100">{money(invoice.currency, invoice.subtotal)}</span>
-                        </div>
-
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-300">Desconto</span>
-                            <span className="font-mono text-slate-100">{money(invoice.currency, invoice.discount)}</span>
-                        </div>
-
-                        <div className="flex justify-between text-sm">
-                            <span className="text-slate-300">Taxas</span>
-                            <span className="font-mono text-slate-100">{money(invoice.currency, invoice.tax)}</span>
-                        </div>
-
-                        <div className="border-t border-white/10 pt-2 flex justify-between font-semibold">
-                            <span className="text-slate-100">Total</span>
-                            <span className="font-mono text-slate-100">{money(invoice.currency, invoice.total)}</span>
-                        </div>
-                    </div>
-
-                    {/* NOTES / META */}
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2">
-                        <div className="text-sm font-semibold text-slate-100">Meta</div>
-                        <div className="text-xs text-slate-400">
-                            Status e regra de pagamento seguem o backend. Pagamentos podem ser parciais.
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-400">
-                            <div>
-                                <div className="text-slate-500">Criada</div>
-                                <div className="font-mono text-slate-200">{dateOnly(invoice.createdAt)}</div>
-                            </div>
-                            <div>
-                                <div className="text-slate-500">Atualizada</div>
-                                <div className="font-mono text-slate-200">{dateOnly(invoice.updatedAt)}</div>
+            {/* PAYMENT LINKS / PIX */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Card
+                    title="Payment Link"
+                    subtitle="Link de pagamento (gateway)"
+                    icon={<ExternalLink size={16} className="text-sky-300" />}
+                >
+                    {invoice.payment_link ? (
+                        <div className="space-y-3">
+                            <div className="text-xs text-slate-300 break-all">{invoice.payment_link}</div>
+                            <div className="flex gap-2">
+                                <button
+                                    className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
+                                    onClick={() => window.open(invoice.payment_link, "_blank")}
+                                >
+                                    Abrir
+                                </button>
+                                <button
+                                    className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
+                                    onClick={() => copyToClipboard(invoice.payment_link, "Link copiado")}
+                                >
+                  <span className="inline-flex items-center gap-2">
+                    <Copy size={16} />
+                    Copiar
+                  </span>
+                                </button>
                             </div>
                         </div>
+                    ) : (
+                        <EmptyHint text="Sem payment_link (ainda não gerado)." />
+                    )}
+                </Card>
+
+                <Card
+                    title="PIX Copy & Paste"
+                    subtitle="Chave/código copia e cola"
+                    icon={<Copy size={16} className="text-emerald-300" />}
+                >
+                    {invoice.pix_copy_paste ? (
+                        <div className="space-y-3">
+                            <div className="text-xs text-slate-300 break-all">{invoice.pix_copy_paste}</div>
+                            <button
+                                className="px-3 py-2 rounded-xl border border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/15 text-sm font-semibold text-emerald-200"
+                                onClick={() => copyToClipboard(invoice.pix_copy_paste, "PIX copiado")}
+                            >
+                <span className="inline-flex items-center gap-2">
+                  <Copy size={16} />
+                  Copiar PIX
+                </span>
+                            </button>
+                        </div>
+                    ) : (
+                        <EmptyHint text="Sem pix_copy_paste (ainda não gerado)." />
+                    )}
+                </Card>
+
+                <Card
+                    title="PIX QRCode"
+                    subtitle="QR em texto/base64 (se existir)"
+                    icon={<ExternalLink size={16} className="text-amber-300" />}
+                >
+                    {invoice.pix_qrcode ? (
+                        <div className="space-y-3">
+                            <div className="text-xs text-slate-300 break-all line-clamp-5">
+                                {invoice.pix_qrcode}
+                            </div>
+                            <button
+                                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
+                                onClick={() => copyToClipboard(invoice.pix_qrcode, "QRCode copiado")}
+                            >
+                <span className="inline-flex items-center gap-2">
+                  <Copy size={16} />
+                  Copiar QR
+                </span>
+                            </button>
+                        </div>
+                    ) : (
+                        <EmptyHint text="Sem pix_qrcode (ainda não gerado)." />
+                    )}
+                </Card>
+            </div>
+
+            {/* ITEMS */}
+            <Section
+                title="Items"
+                icon={<ClipboardList size={16} className="text-sky-300" />}
+                count={items.length}
+            >
+                <Table
+                    head={["ID", "Type", "Produto", "Descrição", "Qty", "Unit", "Total", "Atualizado"]}
+                    empty="Nenhum item."
+                >
+                    {items.map((it) => (
+                        <tr key={it.id} className="border-t border-white/5">
+                            <td className="px-4 py-3 font-mono text-slate-200">{it.id}</td>
+
+                            <td className="px-4 py-3 text-slate-300">{it.type || "—"}</td>
+
+                            {/* ✅ product quando existir */}
+                            <td className="px-4 py-3">
+                                <div className="min-w-0">
+                                    <div className="text-slate-200 font-semibold truncate max-w-[340px]">
+                                        {it.product?.name ||
+                                            it.product?.hostname ||
+                                            (it.ref_id ? `#${it.ref_id}` : "—")}
+                                    </div>
+
+                                    {it.product?.status ? (
+                                        <div className="text-xs text-slate-500 truncate max-w-[340px]">
+                                            {it.product.status} · CPU {it.product.cpu ?? "—"} · RAM{" "}
+                                            {it.product.memory_mb ?? "—"} MB
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-slate-600 truncate max-w-[340px]">
+                                            ref_id: {it.ref_id ?? "—"}
+                                        </div>
+                                    )}
+                                </div>
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-200">{it.description || "—"}</td>
+                            <td className="px-4 py-3 text-slate-300">{it.qty ?? "—"}</td>
+                            <td className="px-4 py-3 text-slate-300">{it.unit_price ?? "—"}</td>
+                            <td className="px-4 py-3 text-slate-200 font-semibold">{it.total ?? "—"}</td>
+                            <td className="px-4 py-3 text-slate-500">{fmtDateTime(it.updated_at)}</td>
+                        </tr>
+                    ))}
+                </Table>
+            </Section>
+
+            {/* PAYMENTS */}
+            <Section
+                title="Payments"
+                icon={<CreditCard size={16} className="text-sky-300" />}
+                count={payments.length}
+                right={
+                    !canAddPayment ? (
+                        <span className="text-[11px] text-slate-400 border border-white/10 bg-black/20 px-3 py-2 rounded-xl">
+              Ações bloqueadas por permissions
+            </span>
+                    ) : null
+                }
+            >
+                <Table
+                    head={["ID", "Status", "Method", "Amount", "Reference", "Paid at", "Criado"]}
+                    empty="Nenhum pagamento."
+                >
+                    {payments.map((p) => (
+                        <tr key={p.id} className="border-t border-white/5">
+                            <td className="px-4 py-3 font-mono text-slate-200">{p.id}</td>
+
+                            <td className="px-4 py-3">
+                                <PaymentStatusBadge status={p.status} />
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-300">{p.method || "—"}</td>
+
+                            <td className="px-4 py-3 text-slate-200 font-semibold">
+                                {toMoneyString(p.amount)} {p.currency || currency}
+                            </td>
+
+                            <td className="px-4 py-3 text-slate-300">{p.reference || p.txid || "—"}</td>
+
+                            <td className="px-4 py-3 text-slate-300">{fmtDateTime(p.paid_at)}</td>
+
+                            <td className="px-4 py-3 text-slate-500">{fmtDateTime(p.created_at)}</td>
+                        </tr>
+                    ))}
+                </Table>
+            </Section>
+        </div>
+    );
+}
+
+/* ================= UI COMPONENTS ================= */
+
+function Card({ title, subtitle, icon, children }) {
+    return (
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-4">
+            <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                    <div className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-2">
+                        {icon}
+                        {title}
                     </div>
+                    {subtitle ? <div className="text-[11px] text-slate-400 mt-1">{subtitle}</div> : null}
                 </div>
             </div>
+            {children}
+        </div>
+    );
+}
+
+function EmptyHint({ text }) {
+    return (
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs text-slate-400">
+            {text}
+        </div>
+    );
+}
+
+function Section({ title, icon, count, children, right }) {
+    return (
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                    {icon}
+                    {title}
+                    <span className="text-xs text-slate-400 font-normal">({count})</span>
+                </div>
+                <div className="flex items-center gap-2">{right}</div>
+            </div>
+            {children}
+        </div>
+    );
+}
+
+function Table({ head = [], empty = "Sem dados", children }) {
+    const hasRows = Array.isArray(children) ? children.length > 0 : !!children;
+
+    return (
+        <div className="overflow-auto">
+            <table className="w-full text-sm">
+                <thead className="bg-black/20">
+                <tr className="text-left text-xs text-slate-400">
+                    {head.map((h) => (
+                        <th key={h} className="px-4 py-3">
+                            {h}
+                        </th>
+                    ))}
+                </tr>
+                </thead>
+                <tbody>
+                {!hasRows ? (
+                    <tr>
+                        <td className="px-4 py-6 text-slate-400" colSpan={head.length || 1}>
+                            {empty}
+                        </td>
+                    </tr>
+                ) : (
+                    children
+                )}
+                </tbody>
+            </table>
         </div>
     );
 }

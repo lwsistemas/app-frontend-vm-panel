@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 
 // Core
 import Dashboard from "./pages/Dashboard";
+import FinanceDashboard from "./pages/DashboardFinance/FinanceDashboard.jsx";
 
 // VM
 import VmPage from "./pages/vm/VmPage";
@@ -33,6 +34,8 @@ import MainLayout from "./MainLayout.jsx";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NotFound from "./pages/NotFound";
 
+
+
 export default function App() {
     return (
         <BrowserRouter>
@@ -57,6 +60,8 @@ export default function App() {
                         {/* Dashboard */}
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/dashboard" element={<Dashboard />} />
+                        <Route path="/dashboard/finance" element={<FinanceDashboard />} />
+
 
                         {/* VMs */}
                         <Route path="/vms" element={<VmPage />} />

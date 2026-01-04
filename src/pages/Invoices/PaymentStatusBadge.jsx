@@ -3,18 +3,16 @@ function cls(...arr) {
 }
 
 /**
- * Status oficiais do backend:
- * pending | paid | overdue | canceled | refunded
+ * Status que aparecem em payments:
+ * confirmed | pending | failed (e outros futuros)
  */
-export default function InvoiceStatusBadge({ status }) {
+export default function PaymentStatusBadge({ status }) {
     const s = (status || "").toLowerCase();
 
     const map = {
-        paid: { label: "Paid", tone: "emerald" },
+        confirmed: { label: "Confirmed", tone: "emerald" },
         pending: { label: "Pending", tone: "amber" },
-        overdue: { label: "Overdue", tone: "red" },
-        canceled: { label: "Canceled", tone: "slate" },
-        refunded: { label: "Refunded", tone: "slate" },
+        failed: { label: "Failed", tone: "red" },
     };
 
     const cfg = map[s] || { label: status || "—", tone: "slate" };
