@@ -640,7 +640,7 @@ export default function Header() {
             });
             return arr;
         }
-
+//
         return arr;
     }, [isVmDetail, vmId, navigate, isPrivileged, location.pathname]);
 
