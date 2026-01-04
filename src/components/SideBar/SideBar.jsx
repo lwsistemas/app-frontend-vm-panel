@@ -1,43 +1,40 @@
+// src/components/SideBar/SideBar.jsx
 import SidebarGroup from "./SidebarGroup";
-import { SIDEBAR_GROUPS } from "./sidebar.config";
-import { useAuth } from "../../context/AuthContext";
+import { SIDEBAR_MENU } from "./sidebar.config";
+import { getRoleFromStorage, isPrivilegedRole } from "./getUserFromStorage";
+import "./sidebar.scroll.css";
+
+function shouldLockGroup(groupName, isPrivileged) {
+    const lockedGroups = ["Datacenter", "Admin", "System"];
+    if (isPrivileged) return false;
+    return lockedGroups.includes(groupName);
+}
 
 export default function SideBar() {
-    const { role } = useAuth();
+    const role = getRoleFromStorage();
+    const privileged = isPrivilegedRole(role);
 
-    const menu = SIDEBAR_GROUPS.map((group) => {
+    const menu = SIDEBAR_MENU.map((group) => {
+        const lockGroup = shouldLockGroup(group.group, privileged);
+
         const items = (group.items || []).map((item) => {
-            const roles = item.roles || [];
-            const allowed = roles.length === 0 ? true : roles.includes(role);
-
-            // mostra sempre se showForAll
-            const showForAll = item.showForAll === true;
-
-            if (!allowed && showForAll) {
-                return {
-                    ...item,
-                    disabled: true,
-                    tooltip: "Somente suporte / admin",
-                };
+            if (lockGroup) {
+                return { ...item, disabled: true, tooltip: "Somente suporte / admin" };
             }
-
-            // se não for showForAll, esconde de fato
-            if (!allowed && !showForAll) return null;
-
-            return { ...item, disabled: false };
-        }).filter(Boolean);
+            return { ...item, disabled: !!item.disabled };
+        });
 
         return { ...group, items };
     });
 
     return (
-        <aside className="w-64 h-screen border-r border-white/10 bg-gradient-to-b from-slate-950 to-slate-900">
-            <div className="p-4 border-b border-white/10">
+        <aside className="w-64 h-screen flex flex-col border-r border-white/10 bg-gradient-to-b from-slate-950 to-slate-900">
+            <div className="p-4 border-b border-white/10 shrink-0">
                 <div className="text-lg font-semibold text-white">VM Panel</div>
-                <div className="text-xs text-slate-400">Infra · Cloud · Billing</div>
+                <div className="text-xs text-slate-400">Controle de Máquinas Virtuais</div>
             </div>
 
-            <nav className="p-3 overflow-y-auto">
+            <nav className="p-3 flex-1 vm-sidebar-scroll">
                 {menu.map((group) => (
                     <SidebarGroup key={group.group} group={group.group} items={group.items} />
                 ))}

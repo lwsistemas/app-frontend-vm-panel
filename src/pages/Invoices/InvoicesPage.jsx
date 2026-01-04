@@ -2,11 +2,9 @@ import React, { useEffect, useState } from "react";
 import { FileText, Search } from "lucide-react";
 import Swal from "sweetalert2";
 
-import InvoicesApi from "../../services/";
+import { listInvoices } from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
-import InvoiceActions from "./InvoiceActions";
-
-
+import InvoiceActions from "./components/InvoiceActions.jsx";
 
 export default function InvoicesPage() {
     const [loading, setLoading] = useState(false);
@@ -16,19 +14,27 @@ export default function InvoicesPage() {
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
 
+    // debounce simples
+    const [debouncedSearch, setDebouncedSearch] = useState(search);
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search), 300);
+        return () => clearTimeout(t);
+    }, [search]);
+
     async function load(page = 1) {
         setLoading(true);
         try {
-            const res = await InvoicesApi.list({
+            const res = await listInvoices({
                 page,
                 limit: meta.limit,
-                search,
+                search: debouncedSearch,
                 status,
             });
 
             setRows(res.data || []);
-            setMeta(res.pagination || meta);
+            setMeta(res.pagination || { ...meta, page });
         } catch (err) {
+            console.error(err);
             Swal.fire("Erro", "Erro ao carregar invoices", "error");
         } finally {
             setLoading(false);
@@ -37,7 +43,8 @@ export default function InvoicesPage() {
 
     useEffect(() => {
         load(1);
-    }, [search, status]);
+        // eslint-disable-next-line
+    }, [debouncedSearch, status]);
 
     return (
         <div className="p-6 space-y-4">
@@ -55,9 +62,12 @@ export default function InvoicesPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap items-center">
                 <div className="relative">
-                    <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                    <Search
+                        className="absolute left-3 top-2.5 text-slate-400"
+                        size={14}
+                    />
                     <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -72,11 +82,38 @@ export default function InvoicesPage() {
                     className="py-2 px-3 text-sm rounded-xl bg-black/30 border border-white/10"
                 >
                     <option value="">Todos status</option>
-                    <option value="issued">Em aberto</option>
+                    <option value="pending">Em aberto</option>
                     <option value="paid">Paga</option>
                     <option value="overdue">Vencida</option>
                     <option value="canceled">Cancelada</option>
+                    <option value="refunded">Refund</option>
+                    <option value="draft">Draft</option>
                 </select>
+
+                {/* Pagination */}
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        onClick={() => load(Math.max(meta.page - 1, 1))}
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                        disabled={loading || meta.page <= 1}
+                    >
+                        Prev
+                    </button>
+
+                    <span className="text-xs text-slate-400">
+            Page <span className="text-slate-200">{meta.page}</span>
+                        {" • "}
+                        Total <span className="text-slate-200">{meta.total}</span>
+          </span>
+
+                    <button
+                        onClick={() => load(meta.page + 1)}
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                        disabled={loading}
+                    >
+                        Next
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
@@ -109,22 +146,21 @@ export default function InvoicesPage() {
                     ) : (
                         rows.map((inv) => (
                             <tr key={inv.id} className="hover:bg-white/5">
-                                <td className="px-4 py-3 font-mono">{inv.number}</td>
+                                <td className="px-4 py-3 font-mono">
+                                    {inv.number || `#${inv.id}`}
+                                </td>
                                 <td className="px-4 py-3">{inv.owner_name || "-"}</td>
                                 <td className="px-4 py-3 font-mono">
                                     {inv.currency} {inv.total}
                                 </td>
                                 <td className="px-4 py-3">
-                                    {/* badge depois */}
                                     <InvoiceStatusBadge status={inv.status} />
                                 </td>
                                 <td className="px-4 py-3 font-mono">
-                                    {inv.due_at?.slice(0, 10)}
+                                    {inv.due_at ? String(inv.due_at).slice(0, 10) : "-"}
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                    {/* actions depois */}
-                                    <InvoiceActions invoice={inv} onReload={() => load(meta.page)} />
-
+                                    <InvoiceActions invoice={inv} onRefresh={() => load(meta.page)} />
                                 </td>
                             </tr>
                         ))
