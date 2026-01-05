@@ -1,3 +1,4 @@
+// src/pages/Invoices/InvoiceDetailPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -18,7 +19,8 @@ import {
 import InvoicesApi from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
 import PaymentStatusBadge from "./PaymentStatusBadge";
-import InvoiceItemModal from "./components/InvoiceItemModal";
+import InvoiceItemModal from "./components/InvoiceItemModal.jsx";
+import InvoiceActions from "./components/InvoiceActions.jsx";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
@@ -65,9 +67,9 @@ export default function InvoiceDetailPage() {
     const [totals, setTotals] = useState(null);
     const [permissions, setPermissions] = useState(null);
 
-    // ✅ Items modal state
-    const [itemModalOpen, setItemModalOpen] = useState(false);
-    const [itemModalMode, setItemModalMode] = useState("create"); // create | edit
+    // Modal item
+    const [itemOpen, setItemOpen] = useState(false);
+    const [itemMode, setItemMode] = useState("create"); // create|edit
     const [itemEditing, setItemEditing] = useState(null);
 
     async function load() {
@@ -98,8 +100,8 @@ export default function InvoiceDetailPage() {
     const currency = invoice?.currency || "USD";
     const canAddPayment = permissions?.can_add_payment === true;
 
-    // ✅ contract: permissions.can_edit_items vindo do backend payload
-    const canEditItems = permissions?.can_edit_items === true;
+    // ✅ regra correta: backend manda
+    const canEditItems = permissions?.can_edit === true;
 
     const progress = useMemo(() => {
         const total = totals?.total ?? 0;
@@ -125,77 +127,29 @@ export default function InvoiceDetailPage() {
         }
     }
 
-    async function addPayment() {
-        const { value } = await Swal.fire({
-            title: "Adicionar pagamento",
-            html: `
-        <input id="amount" class="swal2-input" placeholder="Valor (ex: 10.00)">
-        <input id="method" class="swal2-input" placeholder="Método (pix|card|boleto|manual)">
-        <input id="reference" class="swal2-input" placeholder="Reference (txid/nsu/opcional)">
-      `,
-            focusConfirm: false,
-            showCancelButton: true,
-            confirmButtonText: "Salvar",
-            cancelButtonText: "Cancelar",
-            preConfirm: () => {
-                const amountRaw = document.getElementById("amount").value;
-                const method = document.getElementById("method").value;
-                const reference = document.getElementById("reference").value;
-
-                if (!amountRaw || !method) {
-                    Swal.showValidationMessage("Informe valor e método");
-                    return null;
-                }
-
-                const amount = Number(amountRaw);
-                if (Number.isNaN(amount) || amount <= 0) {
-                    Swal.showValidationMessage("Valor inválido");
-                    return null;
-                }
-
-                return {
-                    amount, // ✅ swagger: number
-                    method: String(method).trim(),
-                    reference: reference ? String(reference).trim() : undefined,
-                };
-            },
-        });
-
-        if (!value) return;
-
-        try {
-            await InvoicesApi.addPayment(id, value);
-            Swal.fire("OK", "Pagamento registrado", "success");
-            await load();
-        } catch (err) {
-            console.error(err);
-            Swal.fire("Erro", "Falha ao adicionar pagamento", "error");
-        }
-    }
-
-    // ✅ Items actions
     function openCreateItem() {
+        setItemMode("create");
         setItemEditing(null);
-        setItemModalMode("create");
-        setItemModalOpen(true);
+        setItemOpen(true);
     }
 
     function openEditItem(it) {
+        setItemMode("edit");
         setItemEditing(it);
-        setItemModalMode("edit");
-        setItemModalOpen(true);
+        setItemOpen(true);
     }
 
     async function submitItem(payload) {
         try {
-            if (itemModalMode === "edit" && itemEditing?.id) {
+            if (itemMode === "edit" && itemEditing?.id) {
                 await InvoicesApi.updateItem(id, itemEditing.id, payload);
                 Swal.fire("OK", "Item atualizado", "success");
             } else {
                 await InvoicesApi.addItem(id, payload);
                 Swal.fire("OK", "Item adicionado", "success");
             }
-            setItemModalOpen(false);
+
+            setItemOpen(false);
             setItemEditing(null);
             await load();
         } catch (err) {
@@ -286,8 +240,8 @@ export default function InvoiceDetailPage() {
                     </div>
                 </div>
 
-                {/* ACTIONS */}
-                <div className="flex items-center gap-2">
+                {/* ACTIONS (status + pay) */}
+                <div className="flex items-center gap-2 flex-wrap">
                     <button
                         onClick={load}
                         className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
@@ -298,22 +252,29 @@ export default function InvoiceDetailPage() {
                         </span>
                     </button>
 
-                    <button
-                        onClick={addPayment}
-                        disabled={!canAddPayment}
-                        className={cls(
-                            "px-3 py-2 rounded-xl border text-sm font-semibold",
-                            canAddPayment
-                                ? "border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/15 text-emerald-200"
-                                : "border-white/10 bg-white/5 text-slate-500 opacity-60 cursor-not-allowed"
-                        )}
-                        title={!canAddPayment ? "Sem permissão para adicionar pagamento" : "Adicionar pagamento"}
-                    >
-                        <span className="flex items-center gap-2">
-                            <Plus size={16} />
-                            Add Payment
+                    {/* ✅ Status/Pay actions com permissions do backend */}
+                    <InvoiceActions invoice={invoice} permissions={permissions} onRefresh={load} />
+
+                    {/* Add Item rápido no header */}
+                    {canEditItems ? (
+                        <button
+                            onClick={openCreateItem}
+                            className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
+                            title="Adicionar item"
+                        >
+                            <span className="flex items-center gap-2">
+                                <Plus size={16} />
+                                Add Item
+                            </span>
+                        </button>
+                    ) : null}
+
+                    {/* badge para clareza */}
+                    {!canEditItems ? (
+                        <span className="text-[11px] text-slate-400 border border-white/10 bg-black/20 px-3 py-2 rounded-xl">
+                            Itens bloqueados por permissions
                         </span>
-                    </button>
+                    ) : null}
                 </div>
             </div>
 
@@ -325,8 +286,7 @@ export default function InvoiceDetailPage() {
                         <span className="text-sm text-slate-400 font-semibold">{currency}</span>
                     </div>
                     <div className="text-xs text-slate-400 mt-1">
-                        Subtotal:{" "}
-                        <span className="text-slate-200 font-semibold">{toMoneyString(invoice.subtotal)}</span>
+                        Subtotal: <span className="text-slate-200 font-semibold">{toMoneyString(invoice.subtotal)}</span>
                     </div>
                 </Card>
 
@@ -366,20 +326,13 @@ export default function InvoiceDetailPage() {
                     <span className="text-slate-200 font-semibold">{progress.toFixed(0)}%</span>
                 </div>
                 <div className="h-3 rounded-full bg-black/30 border border-white/10 overflow-hidden">
-                    <div
-                        className="h-full bg-gradient-to-r from-emerald-500/70 to-sky-500/70"
-                        style={{ width: `${progress}%` }}
-                    />
+                    <div className="h-full bg-gradient-to-r from-emerald-500/70 to-sky-500/70" style={{ width: `${progress}%` }} />
                 </div>
             </Card>
 
             {/* PAYMENT LINKS / PIX */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <Card
-                    title="Payment Link"
-                    subtitle="Link de pagamento (gateway)"
-                    icon={<ExternalLink size={16} className="text-sky-300" />}
-                >
+                <Card title="Payment Link" subtitle="Link de pagamento (gateway)" icon={<ExternalLink size={16} className="text-sky-300" />}>
                     {invoice.payment_link ? (
                         <div className="space-y-3">
                             <div className="text-xs text-slate-300 break-all">{invoice.payment_link}</div>
@@ -395,8 +348,7 @@ export default function InvoiceDetailPage() {
                                     onClick={() => copyToClipboard(invoice.payment_link, "Link copiado")}
                                 >
                                     <span className="inline-flex items-center gap-2">
-                                        <Copy size={16} />
-                                        Copiar
+                                        <Copy size={16} /> Copiar
                                     </span>
                                 </button>
                             </div>
@@ -406,11 +358,7 @@ export default function InvoiceDetailPage() {
                     )}
                 </Card>
 
-                <Card
-                    title="PIX Copy & Paste"
-                    subtitle="Chave/código copia e cola"
-                    icon={<Copy size={16} className="text-emerald-300" />}
-                >
+                <Card title="PIX Copy & Paste" subtitle="Chave/código copia e cola" icon={<Copy size={16} className="text-emerald-300" />}>
                     {invoice.pix_copy_paste ? (
                         <div className="space-y-3">
                             <div className="text-xs text-slate-300 break-all">{invoice.pix_copy_paste}</div>
@@ -419,8 +367,7 @@ export default function InvoiceDetailPage() {
                                 onClick={() => copyToClipboard(invoice.pix_copy_paste, "PIX copiado")}
                             >
                                 <span className="inline-flex items-center gap-2">
-                                    <Copy size={16} />
-                                    Copiar PIX
+                                    <Copy size={16} /> Copiar PIX
                                 </span>
                             </button>
                         </div>
@@ -429,11 +376,7 @@ export default function InvoiceDetailPage() {
                     )}
                 </Card>
 
-                <Card
-                    title="PIX QRCode"
-                    subtitle="QR em texto/base64 (se existir)"
-                    icon={<ExternalLink size={16} className="text-amber-300" />}
-                >
+                <Card title="PIX QRCode" subtitle="QR em texto/base64 (se existir)" icon={<ExternalLink size={16} className="text-amber-300" />}>
                     {invoice.pix_qrcode ? (
                         <div className="space-y-3">
                             <div className="text-xs text-slate-300 break-all line-clamp-5">{invoice.pix_qrcode}</div>
@@ -442,8 +385,7 @@ export default function InvoiceDetailPage() {
                                 onClick={() => copyToClipboard(invoice.pix_qrcode, "QRCode copiado")}
                             >
                                 <span className="inline-flex items-center gap-2">
-                                    <Copy size={16} />
-                                    Copiar QR
+                                    <Copy size={16} /> Copiar QR
                                 </span>
                             </button>
                         </div>
@@ -458,65 +400,28 @@ export default function InvoiceDetailPage() {
                 title="Items"
                 icon={<ClipboardList size={16} className="text-sky-300" />}
                 count={items.length}
-                right={
-                    <div className="flex items-center gap-2">
-                        {!canEditItems ? (
-                            <span className="text-[11px] text-slate-400 border border-white/10 bg-black/20 px-3 py-2 rounded-xl">
-                                Itens bloqueados por permissions
-                            </span>
-                        ) : (
-                            <button
-                                onClick={openCreateItem}
-                                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold"
-                                title="Adicionar item"
-                            >
-                                <span className="inline-flex items-center gap-2">
-                                    <Plus size={16} />
-                                    Add Item
-                                </span>
-                            </button>
-                        )}
-                    </div>
-                }
             >
                 <Table
-                    head={[
-                        "ID",
-                        "Type",
-                        "Produto",
-                        "Descrição",
-                        "Qty",
-                        "Unit",
-                        "Total",
-                        "Atualizado",
-                        "Ações",
-                    ]}
+                    head={["ID", "Type", "Produto", "Descrição", "Qty", "Unit", "Total", "Atualizado", "Ações"]}
                     empty="Nenhum item."
                 >
                     {items.map((it) => (
                         <tr key={it.id} className="border-t border-white/5">
                             <td className="px-4 py-3 font-mono text-slate-200">{it.id}</td>
-
                             <td className="px-4 py-3 text-slate-300">{it.type || "—"}</td>
 
-                            {/* ✅ product quando existir */}
                             <td className="px-4 py-3">
                                 <div className="min-w-0">
                                     <div className="text-slate-200 font-semibold truncate max-w-[340px]">
-                                        {it.product?.name ||
-                                            it.product?.hostname ||
-                                            (it.ref_id ? `#${it.ref_id}` : "—")}
+                                        {it.product?.name || it.product?.hostname || (it.ref_id ? `#${it.ref_id}` : "—")}
                                     </div>
 
                                     {it.product?.status ? (
                                         <div className="text-xs text-slate-500 truncate max-w-[340px]">
-                                            {it.product.status} · CPU {it.product.cpu ?? "—"} · RAM{" "}
-                                            {it.product.memory_mb ?? "—"} MB
+                                            {it.product.status} · CPU {it.product.cpu ?? "—"} · RAM {it.product.memory_mb ?? "—"} MB
                                         </div>
                                     ) : (
-                                        <div className="text-xs text-slate-600 truncate max-w-[340px]">
-                                            ref_id: {it.ref_id ?? "—"}
-                                        </div>
+                                        <div className="text-xs text-slate-600 truncate max-w-[340px]">ref_id: {it.ref_id ?? "—"}</div>
                                     )}
                                 </div>
                             </td>
@@ -541,8 +446,7 @@ export default function InvoiceDetailPage() {
                                         title={!canEditItems ? "Sem permissão" : "Editar item"}
                                     >
                                         <span className="inline-flex items-center gap-2">
-                                            <Pencil size={14} />
-                                            Editar
+                                            <Pencil size={14} /> Editar
                                         </span>
                                     </button>
 
@@ -558,8 +462,7 @@ export default function InvoiceDetailPage() {
                                         title={!canEditItems ? "Sem permissão" : "Remover item"}
                                     >
                                         <span className="inline-flex items-center gap-2">
-                                            <Trash2 size={14} />
-                                            Remover
+                                            <Trash2 size={14} /> Remover
                                         </span>
                                     </button>
                                 </div>
@@ -610,13 +513,14 @@ export default function InvoiceDetailPage() {
                 </Table>
             </Section>
 
+            {/* MODAL ITEM */}
             <InvoiceItemModal
-                open={itemModalOpen}
-                mode={itemModalMode}
+                open={itemOpen}
+                mode={itemMode}
                 initial={itemEditing}
                 currency={currency}
                 onClose={() => {
-                    setItemModalOpen(false);
+                    setItemOpen(false);
                     setItemEditing(null);
                 }}
                 onSubmit={submitItem}

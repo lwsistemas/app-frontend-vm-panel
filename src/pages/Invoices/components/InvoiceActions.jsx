@@ -1,29 +1,31 @@
 // src/pages/Invoices/components/InvoiceActions.jsx
 import { useMemo, useState } from "react";
-import { Loader2, CreditCard, Ban, RotateCcw } from "lucide-react";
-import { setInvoiceStatus } from "../../../services/invoices.jsx";
+import { Loader2, CreditCard, Ban, RotateCcw, Send } from "lucide-react";
+import InvoicesApi from "../../../services/invoices.jsx";
 import InvoiceAddPaymentModal from "./InvoiceAddPaymentModal.jsx";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
 }
 
-export default function InvoiceActions({ invoice, onRefresh }) {
+export default function InvoiceActions({ invoice, permissions, onRefresh }) {
     const [loading, setLoading] = useState(false);
     const [payOpen, setPayOpen] = useState(false);
 
     const status = useMemo(() => String(invoice?.status || "").toLowerCase(), [invoice?.status]);
 
-    const canPay = ["pending", "overdue"].includes(status);
-    const canCancel = ["draft", "pending", "overdue"].includes(status);
-    const canRefund = ["paid"].includes(status);
+    // ✅ Backend manda o contrato. Status aqui é só visual/UX.
+    const canPay = permissions?.can_pay === true;
+    const canCancel = permissions?.can_cancel === true;
+    const canRefund = permissions?.can_refund === true;
+    const canIssue = permissions?.can_issue === true;
 
     async function changeStatus(nextStatus) {
         if (!invoice?.id) return;
 
         try {
             setLoading(true);
-            await setInvoiceStatus(invoice.id, nextStatus);
+            await InvoicesApi.setStatus(invoice.id, nextStatus);
             await onRefresh?.();
         } catch (e) {
             console.error(e);
@@ -35,6 +37,23 @@ export default function InvoiceActions({ invoice, onRefresh }) {
 
     return (
         <div className="flex items-center gap-2 flex-wrap">
+            {/* Issue */}
+            {canIssue ? (
+                <button
+                    onClick={() => changeStatus("pending")}
+                    disabled={loading || status !== "draft"}
+                    className={cls(
+                        "px-3 py-2 rounded-xl border border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/15 text-sm text-sky-100 flex items-center gap-2",
+                        loading ? "opacity-60 cursor-not-allowed" : "",
+                        status !== "draft" ? "opacity-60 cursor-not-allowed" : ""
+                    )}
+                    title="Emitir invoice (Draft → Pending)"
+                >
+                    <Send size={16} />
+                    Emitir
+                </button>
+            ) : null}
+
             {/* Pagar = registrar payment */}
             {canPay ? (
                 <button
@@ -86,8 +105,8 @@ export default function InvoiceActions({ invoice, onRefresh }) {
             {/* Loading pill */}
             {loading ? (
                 <span className="text-xs text-slate-400 flex items-center gap-2 ml-1">
-          <Loader2 size={14} className="animate-spin" /> processando...
-        </span>
+                    <Loader2 size={14} className="animate-spin" /> processando...
+                </span>
             ) : null}
 
             {/* Modal registrar pagamento */}

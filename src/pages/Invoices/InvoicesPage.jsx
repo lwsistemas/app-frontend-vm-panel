@@ -6,6 +6,7 @@ import Swal from "sweetalert2";
 import InvoicesApi from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
 
+
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
 }

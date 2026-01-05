@@ -1,7 +1,7 @@
 // src/pages/Invoices/components/InvoiceAddPaymentModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2 } from "lucide-react";
-import { addInvoicePayment } from "../../../services/invoices.jsx";
+import InvoicesApi from "../../../services/invoices.jsx";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
@@ -79,7 +79,7 @@ export default function InvoiceAddPaymentModal({
                 status: "confirmed", // ou "pending" se quiser permitir
             };
 
-            await addInvoicePayment(invoiceId, payload);
+            await InvoicesApi.addPayment(invoiceId, payload); // ✅ corrigido
 
             onSaved?.();
             onClose?.();

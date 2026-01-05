@@ -21,6 +21,10 @@ import UsersPage from "./pages/Users/UsersPage";
 import InvoicesPage from "./pages/Invoices/InvoicesPage";
 import InvoiceDetailsPage from "./pages/Invoices/InvoiceDetailPage.jsx";
 import InvoiceCreatePage from "./pages/Invoices/InvoiceCreatePage.jsx"; // ✅ NEW
+import PlansPage from "./pages/Invoices/PlansPage.jsx";
+
+
+
 
 // Inventory / Infra / IPs
 import InventoryPage from "./pages/InventoryDc/InventoryPage.jsx";
@@ -71,6 +75,7 @@ export default function App() {
                         <Route path="/invoices" element={<InvoicesPage />} />
                         <Route path="/invoices/new" element={<InvoiceCreatePage />} /> {/* ✅ NEW */}
                         <Route path="/invoices/:id" element={<InvoiceDetailsPage />} />
+                        <Route path="/finance/plans" element={<PlansPage />} />
 
                         {/* Inventory DC */}
                         <Route path="/inventory" element={<InventoryPage />} />

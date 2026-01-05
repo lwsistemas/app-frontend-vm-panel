@@ -17,7 +17,7 @@ import axios from 'axios';
 
 const API_URLS = {
     local: 'http://172.16.11.4:4430',
-    staging: 'http://179.181.104.186:4430',
+    staging: 'http://179.181.104.62:4430',
     production: 'https://api.control.lwsistemas.com.br',
 };
 
