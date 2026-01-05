@@ -20,6 +20,7 @@ import UsersPage from "./pages/Users/UsersPage";
 // Invoices
 import InvoicesPage from "./pages/Invoices/InvoicesPage";
 import InvoiceDetailsPage from "./pages/Invoices/InvoiceDetailPage.jsx";
+import InvoiceCreatePage from "./pages/Invoices/InvoiceCreatePage.jsx"; // ✅ NEW
 
 // Inventory / Infra / IPs
 import InventoryPage from "./pages/InventoryDc/InventoryPage.jsx";
@@ -33,8 +34,6 @@ import MainLayout from "./MainLayout.jsx";
 // Utils
 import ErrorBoundary from "./components/ErrorBoundary";
 import NotFound from "./pages/NotFound";
-
-
 
 export default function App() {
     return (
@@ -62,7 +61,6 @@ export default function App() {
                         <Route path="/dashboard" element={<Dashboard />} />
                         <Route path="/dashboard/finance" element={<FinanceDashboard />} />
 
-
                         {/* VMs */}
                         <Route path="/vms" element={<VmPage />} />
                         <Route path="/vms/create" element={<VmCreatePage />} />
@@ -71,6 +69,7 @@ export default function App() {
 
                         {/* Invoices */}
                         <Route path="/invoices" element={<InvoicesPage />} />
+                        <Route path="/invoices/new" element={<InvoiceCreatePage />} /> {/* ✅ NEW */}
                         <Route path="/invoices/:id" element={<InvoiceDetailsPage />} />
 
                         {/* Inventory DC */}

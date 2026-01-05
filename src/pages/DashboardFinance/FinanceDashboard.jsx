@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import axios from "axios";
+import { getFinanceSummary } from "../../services/financeDashboard.jsx";
 import ReactApexChart from "react-apexcharts";
 
 // ====================== Utils ======================
@@ -313,14 +313,7 @@ export default function FinanceDashboard() {
         setErr(null);
 
         try {
-            const authKey = localStorage.getItem("authKey");
-            const url = `${
-                import.meta.env.VITE_API_URL || "http://localhost:4430"
-            }/dashboard/finance/summary`;
-
-            const { data } = await axios.get(url, {
-                headers: { Authorization: `Bearer ${authKey}` },
-            });
+            const data = await getFinanceSummary(); // ou params aqui
 
             if (!data?.ok) throw new Error("Resposta inválida");
             setSummary(data);

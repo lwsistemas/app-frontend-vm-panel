@@ -8,6 +8,13 @@ const InvoicesApi = {
         return data;
     },
 
+    // CREATE ✅ (faltava)
+    create: async (payload, params = {}) => {
+        // params opcional: { owner_id } -> privileged pode criar para outro owner via querystring
+        const { data } = await api.post("/invoices", payload, { params });
+        return data;
+    },
+
     // DETAIL
     get: async (id) => {
         const { data } = await api.get(`/invoices/${id}`);
@@ -53,7 +60,6 @@ const InvoicesApi = {
         const { data } = await api.post(`/invoices/${invoiceId}/payments`, payload);
         return data;
     },
-
 };
 
 export default InvoicesApi;
