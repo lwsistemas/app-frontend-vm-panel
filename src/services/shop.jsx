@@ -1,47 +1,51 @@
+// src/services/shop.jsx
 import api from "./index.jsx";
 
 /**
  * SHOP SERVICE (ÚNICO)
- * Usa a instância api padrão (baseURL + interceptors)
+ * - usa api padrão
+ * - /shop/* para catalogo/checkout
+ * - /prices/calc para cálculo (rota global no backend)
  */
 
 const Shop = {
-    // PUBLIC
+    // PLANS (PUBLIC)
     plans: {
-        list: () => api.get("/shop/plans").then(r => r.data),
-        get: (id) => api.get(`/shop/plans/${id}`).then(r => r.data),
+        list: (params = {}) =>
+            api.get("/shop/plans", { params }).then((r) => r.data),
+
+        get: (id, params = {}) =>
+            api.get(`/shop/plans/${id}`, { params }).then((r) => r.data),
     },
 
-    // PUBLIC
+    // PRODUCTS (PUBLIC)
     products: {
-        list: () => api.get("/shop/products").then(r => r.data),
-        get: (id) => api.get(`/shop/products/${id}`).then(r => r.data),
+        list: (params = {}) =>
+            api.get("/shop/products", { params }).then((r) => r.data),
+
+        get: (id, params = {}) =>
+            api.get(`/shop/products/${id}`, { params }).then((r) => r.data),
     },
 
-    // PUBLIC
+    // ✅ PRICE CALC (GLOBAL)
     prices: {
-        calc: (payload) => api.post("/shop/prices/calc", payload).then(r => r.data),
+        calc: (payload) =>
+            api.post("/prices/calc", payload).then((r) => r.data),
     },
 
-    /**
-     * AUTH (opcional pro shop, obrigatório se checkout exigir)
-     * Obs: o interceptor já injeta Authorization se existir authKey no localStorage.
-     */
+    // AUTH (se usar depois)
     auth: {
-        register: (payload) => api.post("/shop/users", payload).then(r => r.data),
-        login: (payload) => api.post("/shop/users/login", payload).then(r => r.data),
-        me: () => api.get("/shop/users/me").then(r => r.data),
+        register: (payload) => api.post("/shop/users", payload).then((r) => r.data),
+        login: (payload) => api.post("/shop/users/login", payload).then((r) => r.data),
+        me: () => api.get("/shop/users/me").then((r) => r.data),
     },
 
-    // CHECKOUT (pode ser protegido no backend)
+    // CHECKOUT
     checkout: {
         create: (payload, { idempotencyKey } = {}) => {
             const headers = {};
             if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-
-            return api
-                .post("/shop/checkout", payload, { headers })
-                .then(r => r.data);
+            return api.post("/shop/checkout", payload, { headers }).then((r) => r.data);
         },
     },
 };
