@@ -1,6 +1,7 @@
 // src/pages/Invoices/components/InvoiceItemModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
+import PlansApi from "../../../services/plans"; // << nova dependência
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
@@ -26,6 +27,10 @@ export default function InvoiceItemModal({
     const [unitPrice, setUnitPrice] = useState("0");
     const [metaJson, setMetaJson] = useState("");
 
+    // plans
+    const [plans, setPlans] = useState([]);
+    const [selectedPlanId, setSelectedPlanId] = useState("");
+
     const title = mode === "edit" ? "Editar Item" : "Adicionar Item";
 
     useEffect(() => {
@@ -41,12 +46,28 @@ export default function InvoiceItemModal({
         if (it.meta && typeof it.meta === "object") {
             try {
                 setMetaJson(JSON.stringify(it.meta, null, 2));
+                // if meta contains plan, reflect selectedPlanId if present
+                const planRef = it.meta.plan;
+                if (planRef && planRef.id) setSelectedPlanId(String(planRef.id));
+                else setSelectedPlanId("");
             } catch {
                 setMetaJson("");
+                setSelectedPlanId("");
             }
         } else {
             setMetaJson("");
+            setSelectedPlanId("");
         }
+
+        // fetch plans (active)
+        (async () => {
+            try {
+                const res = await PlansApi.list({ status: "active", limit: 200 });
+                setPlans(res.data || []);
+            } catch (err) {
+                console.error("Failed to load plans", err);
+            }
+        })();
     }, [open, initial]);
 
     const computedTotal = useMemo(() => {
@@ -64,6 +85,31 @@ export default function InvoiceItemModal({
             return JSON.parse(raw);
         } catch {
             return "__INVALID__";
+        }
+    }
+
+    // when user selects a plan, prefill fields
+    function onSelectPlan(planId) {
+        setSelectedPlanId(planId || "");
+        if (!planId) return;
+
+        const p = plans.find((x) => String(x.id) === String(planId));
+        if (!p) return;
+
+        // only auto-fill fields if user didn't type them (or we always override? we fill)
+        setType(p.type || "manual");
+        setDescription(p.name || "");
+        setUnitPrice(p.default_price !== undefined && p.default_price !== null ? String(p.default_price) : "0");
+
+        // merge meta.plan
+        try {
+            const existing = safeParseMeta();
+            const newMeta = Object.assign({}, existing && typeof existing === "object" ? existing : {}, {
+                plan: { id: p.id, code: p.code, name: p.name },
+            });
+            setMetaJson(JSON.stringify(newMeta, null, 2));
+        } catch {
+            // ignore
         }
     }
 
@@ -88,13 +134,24 @@ export default function InvoiceItemModal({
             return alert("Meta precisa ser JSON válido.");
         }
 
+        // ensure plan reference in meta if a plan is selected but not in meta
+        let finalMeta = meta;
+        if (selectedPlanId) {
+            const p = plans.find((x) => String(x.id) === String(selectedPlanId));
+            if (p) {
+                finalMeta = Object.assign({}, meta && typeof meta === "object" ? meta : {}, {
+                    plan: { id: p.id, code: p.code, name: p.name },
+                });
+            }
+        }
+
         const payload = {
             type: type ? String(type).trim() : undefined,
             ref_id: refId ? Number(refId) : undefined,
             description: String(description).trim(),
             qty: q,
             unit_price: u,
-            meta: meta,
+            meta: finalMeta,
         };
 
         await onSubmit(payload);
@@ -123,6 +180,22 @@ export default function InvoiceItemModal({
 
                 <form onSubmit={submit} className="p-5 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Plan selector */}
+                        <Field label="Plan (opcional)">
+                            <select
+                                value={selectedPlanId}
+                                onChange={(e) => onSelectPlan(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl border border-white/10 bg-black/30 text-slate-100 text-sm"
+                            >
+                                <option value="">— nenhum —</option>
+                                {plans.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.code} — {p.name} — {Number(p.default_price).toFixed(2)} {p.currency || "USD"}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+
                         <Field label="Type (opcional)">
                             <input
                                 value={type}

@@ -39,6 +39,11 @@ import MainLayout from "./MainLayout.jsx";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NotFound from "./pages/NotFound";
 
+//paginas publicas shop
+
+import PublicPlansPage from "./pages/Public/Shop/PlansPublicPage.jsx";
+import PlanDetail from "./pages/Public/Shop/PlanDetailSimPage.jsx";
+
 export default function App() {
     return (
         <BrowserRouter>
@@ -49,6 +54,9 @@ export default function App() {
                     {/* ========================= */}
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
+                    <Route path="/plans" element={<PublicPlansPage />} />
+                    <Route path="/plans/:id" element={<PlanDetail />} />
+
 
                     {/* ========================= */}
                     {/* PROTECTED ROUTES */}

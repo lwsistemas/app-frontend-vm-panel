@@ -1,11 +1,12 @@
+// src/pages/Invoices/InvoicesPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Search, RefreshCcw } from "lucide-react";
+import { FileText, Search, RefreshCcw, Plus } from "lucide-react";
 import Swal from "sweetalert2";
 
 import InvoicesApi from "../../services/invoices";
 import InvoiceStatusBadge from "./InvoiceStatusBadge";
-
+import { useAuth } from "../../context/AuthContext.jsx";
 
 function cls(...arr) {
     return arr.filter(Boolean).join(" ");
@@ -13,6 +14,7 @@ function cls(...arr) {
 
 export default function InvoicesPage() {
     const navigate = useNavigate();
+    const { isPrivileged } = useAuth();
 
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState([]);
@@ -82,19 +84,33 @@ export default function InvoicesPage() {
                     </div>
                 </div>
 
-                <button
-                    onClick={load}
-                    className={cls(
-                        "px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold",
-                        loading ? "opacity-60 cursor-not-allowed" : ""
-                    )}
-                    disabled={loading}
-                >
-          <span className="flex items-center gap-2">
-            <RefreshCcw size={16} />
-            Atualizar
-          </span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={load}
+                        className={cls(
+                            "px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm font-semibold",
+                            loading ? "opacity-60 cursor-not-allowed" : ""
+                        )}
+                        disabled={loading}
+                    >
+                        <span className="flex items-center gap-2">
+                            <RefreshCcw size={16} />
+                            Atualizar
+                        </span>
+                    </button>
+
+                    {/* Novo: botão Criar Invoice controlado pela autoridade do auth/me */}
+                    {isPrivileged ? (
+                        <button
+                            onClick={() => navigate("/invoices/new")}
+                            className="ml-2 px-3 py-2 rounded-xl border border-emerald-700/40 bg-emerald-900/10 hover:bg-emerald-900/15 text-sm font-semibold text-emerald-200 flex items-center gap-2"
+                            title="Criar Invoice (privileged only)"
+                        >
+                            <Plus size={14} />
+                            Nova Invoice
+                        </button>
+                    ) : null}
+                </div>
             </div>
 
             {/* Filters */}

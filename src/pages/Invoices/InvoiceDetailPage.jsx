@@ -139,13 +139,69 @@ export default function InvoiceDetailPage() {
         setItemOpen(true);
     }
 
+// normaliza payload do item para o formato que o backend espera
+    function normalizeItemPayloadForBackend(payload) {
+        const p = { ...payload };
+
+        // qty / unit_price como Numbers
+        if (p.qty !== undefined && p.qty !== null && p.qty !== '') {
+            p.qty = Number(p.qty);
+            if (Number.isNaN(p.qty)) p.qty = 0;
+        } else {
+            p.qty = 0;
+        }
+
+        if (p.unit_price !== undefined && p.unit_price !== null && p.unit_price !== '') {
+            p.unit_price = Number(p.unit_price);
+            if (Number.isNaN(p.unit_price)) p.unit_price = 0;
+        } else {
+            p.unit_price = 0;
+        }
+
+        // ref_id como Number se presente
+        if (p.ref_id !== undefined && p.ref_id !== null && p.ref_id !== '') {
+            const n = Number(p.ref_id);
+            p.ref_id = Number.isNaN(n) ? undefined : n;
+        } else {
+            p.ref_id = undefined;
+        }
+
+        // meta: backend aceita string ou null. Converte objetos/arrays em JSON string.
+        if (p.meta === undefined || p.meta === null || p.meta === '') {
+            p.meta = null;
+        } else if (typeof p.meta === 'object') {
+            try {
+                p.meta = JSON.stringify(p.meta);
+            } catch (e) {
+                // se não for serializável, envia null (melhor do que quebrar)
+                p.meta = null;
+            }
+        } else if (typeof p.meta === 'string') {
+            // já string, mantém
+        } else {
+            // outros tipos (number/boolean) -> serializa
+            try {
+                p.meta = JSON.stringify(p.meta);
+            } catch {
+                p.meta = null;
+            }
+        }
+
+        // descrição como string segura
+        p.description = p.description != null ? String(p.description) : "";
+
+        return p;
+    }
+
     async function submitItem(payload) {
         try {
+            const normalized = normalizeItemPayloadForBackend(payload);
+
             if (itemMode === "edit" && itemEditing?.id) {
-                await InvoicesApi.updateItem(id, itemEditing.id, payload);
+                await InvoicesApi.updateItem(id, itemEditing.id, normalized);
                 Swal.fire("OK", "Item atualizado", "success");
             } else {
-                await InvoicesApi.addItem(id, payload);
+                await InvoicesApi.addItem(id, normalized);
                 Swal.fire("OK", "Item adicionado", "success");
             }
 
@@ -154,7 +210,9 @@ export default function InvoiceDetailPage() {
             await load();
         } catch (err) {
             console.error(err);
-            Swal.fire("Erro", "Falha ao salvar item", "error");
+            // tenta extrair mensagem do backend para exibir
+            const msg = err?.response?.data?.error?.message || err?.message || "Falha ao salvar item";
+            Swal.fire("Erro", msg, "error");
         }
     }
 
