@@ -15,6 +15,7 @@ import {
     Calculator,
     BadgeDollarSign,
     AlertTriangle,
+    Hash,
 } from "lucide-react";
 
 import Shop from "../../../services/shop.jsx";
@@ -56,8 +57,8 @@ function debounce(fn, wait = 500) {
 function Pill({ children }) {
     return (
         <span className="inline-flex items-center gap-2 text-[11px] px-3 py-2 rounded-xl border border-white/10 bg-black/20 text-slate-300">
-      {children}
-    </span>
+            {children}
+        </span>
     );
 }
 
@@ -106,18 +107,18 @@ function RangeRow({ value, setValue, min, max, step = 1, suffix = "" }) {
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-400">
-          {min}
-            {suffix}
-        </span>
-                <span className="text-slate-200 font-semibold">
-          {value}
-                    {suffix}
-        </span>
                 <span className="text-slate-400">
-          {max}
+                    {min}
                     {suffix}
-        </span>
+                </span>
+                <span className="text-slate-200 font-semibold">
+                    {value}
+                    {suffix}
+                </span>
+                <span className="text-slate-400">
+                    {max}
+                    {suffix}
+                </span>
             </div>
 
             <input
@@ -156,7 +157,6 @@ export default function PlanDetailPage() {
     const [customEnabled, setCustomEnabled] = useState(false);
     const [qty, setQty] = useState(1);
 
-    // UI state (igual cards): cpu, memGb, diskGb
     const [cpu, setCpu] = useState(1);
     const [memGb, setMemGb] = useState(2);
     const [diskGb, setDiskGb] = useState(40);
@@ -232,8 +232,6 @@ export default function PlanDetailPage() {
         };
     }, [load]);
 
-    // ✅ PAYLOAD CORRETO PRO BACKEND:
-    // custom: { cores, memory_gb, disk_gb } (não memory_mb)
     const customPayload = useMemo(() => {
         if (!plan?.id) return null;
 
@@ -254,31 +252,45 @@ export default function PlanDetailPage() {
         return payload;
     }, [plan?.id, qty, customEnabled, cpu, memGb, diskGb, limits]);
 
+    const abortRef = useRef(null);
+    const reqSeqRef = useRef(0);
+
     const doCalc = useCallback(async () => {
         if (!customPayload) return;
+        if (!customEnabled) return;
+
+        const mySeq = ++reqSeqRef.current;
 
         try {
             setCalcLoading(true);
             setCalcErr(null);
 
-            const res = await Shop.prices.calc(customPayload);
+            if (abortRef.current) abortRef.current.abort();
+            abortRef.current = new AbortController();
 
-            // ✅ backend responde: { ok: true, price: {...} }
+            const res = await Shop.prices.calc(customPayload, { signal: abortRef.current.signal });
             const price = res?.price || res?.data?.price || null;
+
             if (!price) throw new Error("Resposta inválida do cálculo");
 
-            setCalcResult(price);
+            if (mySeq === reqSeqRef.current) {
+                setCalcResult(price);
+            }
         } catch (e) {
-            setCalcErr(e?.message || "Falha ao calcular preço");
-            setCalcResult(null);
+            if (e?.name === "AbortError" || e?.name === "CanceledError") return;
+
+            if (mySeq === reqSeqRef.current) {
+                setCalcErr(e?.message || "Falha ao calcular preço");
+                setCalcResult(null);
+            }
         } finally {
-            setCalcLoading(false);
+            if (mySeq === reqSeqRef.current) setCalcLoading(false);
         }
-    }, [customPayload]);
+    }, [customPayload, customEnabled]);
 
     const debouncedCalcRef = useRef(null);
     useEffect(() => {
-        debouncedCalcRef.current = debounce(() => doCalc(), 550);
+        debouncedCalcRef.current = debounce(() => doCalc(), 450);
     }, [doCalc]);
 
     useEffect(() => {
@@ -287,6 +299,7 @@ export default function PlanDetailPage() {
         if (!customEnabled) {
             setCalcResult(null);
             setCalcErr(null);
+            setCalcLoading(false);
             return;
         }
 
@@ -296,13 +309,15 @@ export default function PlanDetailPage() {
     function buildCartItem() {
         const hasCustom = !!customEnabled;
 
+        const unitPrice = calcResult?.unit_price ?? Number(plan.default_price || 0);
+        const q = isPositiveInt(qty) ? qty : 1;
+
         return {
             kind: "plan",
             plan_id: plan.id,
             product_id: null,
-            qty: isPositiveInt(qty) ? qty : 1,
+            qty: q,
 
-            // ✅ persist custom no formato do backend (cores/memory_gb/disk_gb)
             customization: hasCustom
                 ? {
                     cores: clamp(cpu, limits.cpu.min, limits.cpu.max),
@@ -312,7 +327,8 @@ export default function PlanDetailPage() {
                 : null,
 
             pricing_version: calcResult?.pricing_version || null,
-            unit_price: calcResult?.unit_price ?? Number(plan.default_price || 0),
+            unit_price: unitPrice,
+            total_price: calcResult?.total_price ?? unitPrice * q,
 
             meta: {
                 code: plan.code,
@@ -344,17 +360,28 @@ export default function PlanDetailPage() {
         cart.items.push(item);
 
         localStorage.setItem(key, JSON.stringify(cart));
+
+        // ✅ atualiza badge
         window.dispatchEvent(new CustomEvent("vm-panel-cart-updated"));
+
+        // ✅ abre drawer automaticamente
+        window.dispatchEvent(new CustomEvent("vm-panel-cart-open"));
     }
 
     const title = plan?.name || `Plan #${id}`;
     const code = plan?.code || "-";
     const basePrice = fmtMoney(plan?.default_price, planCurrency);
 
-    const calcPriceText = useMemo(() => {
+    const calcUnitText = useMemo(() => {
         if (!customEnabled) return null;
         if (calcResult?.unit_price == null) return null;
         return fmtMoney(calcResult.unit_price, planCurrency);
+    }, [customEnabled, calcResult, planCurrency]);
+
+    const calcTotalText = useMemo(() => {
+        if (!customEnabled) return null;
+        if (calcResult?.total_price == null) return null;
+        return fmtMoney(calcResult.total_price, planCurrency);
     }, [customEnabled, calcResult, planCurrency]);
 
     const cpuBase = baseDefaults.baseCpu;
@@ -372,7 +399,7 @@ export default function PlanDetailPage() {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(16,185,129,0.08),transparent_55%)]" />
             </div>
 
-            <PublicHeader cartCount={0} onOpenCart={() => {}} />
+            <PublicHeader />
 
             <main className="max-w-6xl mx-auto p-6 space-y-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -398,17 +425,10 @@ export default function PlanDetailPage() {
                 <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-5">
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div className="min-w-0">
-                            <div className="text-[11px] uppercase tracking-wide text-slate-500">
-                                {code}
-                            </div>
-
+                            <div className="text-[11px] uppercase tracking-wide text-slate-500">{code}</div>
                             <div className="mt-1 text-2xl font-bold text-slate-100">{title}</div>
 
-                            {plan?.description && (
-                                <div className="mt-2 text-sm text-slate-400 max-w-3xl">
-                                    {plan.description}
-                                </div>
-                            )}
+                            {plan?.description && <div className="mt-2 text-sm text-slate-400 max-w-3xl">{plan.description}</div>}
 
                             <div className="mt-4 flex items-center gap-2 flex-wrap">
                                 <BillingPill billing_type={billing_type} interval={interval} />
@@ -441,9 +461,7 @@ export default function PlanDetailPage() {
                     </div>
 
                     <div className="mt-5 rounded-2xl p-4 border border-white/10 bg-white/5">
-                        <div className="text-xs text-slate-400">
-                            Configure com presets ou personalize recursos. Preço sempre calculado no backend.
-                        </div>
+                        <div className="text-xs text-slate-400">Preço e validação sempre pelo backend.</div>
                     </div>
                 </div>
 
@@ -470,18 +488,13 @@ export default function PlanDetailPage() {
                             <SpecItem icon={<Repeat size={16} />} label="Cobrança" value={`${billing_type}${interval ? ` / ${interval}` : ""}`} />
                         </div>
 
-                        <div
-                            id="configure"
-                            className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-5"
-                        >
+                        <div id="configure" className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-5">
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="flex items-center gap-2">
                                     <SlidersHorizontal size={18} className="text-slate-300" />
                                     <div>
                                         <div className="text-sm font-semibold text-slate-100">Configuração</div>
-                                        <div className="text-xs text-slate-500">
-                                            Custom com cálculo autoritativo (cores/memory_gb/disk_gb)
-                                        </div>
+                                        <div className="text-xs text-slate-500">Custom com cálculo autoritativo</div>
                                     </div>
                                 </div>
 
@@ -520,19 +533,19 @@ export default function PlanDetailPage() {
 
                             <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
                                 <div className="xl:col-span-2 space-y-4">
-                                    <Field icon={<Cpu size={16} />} label="CPU" hint="cores (backend)">
+                                    <Field icon={<Cpu size={16} />} label="CPU" hint="cores">
                                         <RangeRow value={cpu} setValue={setCpu} min={limits.cpu.min} max={limits.cpu.max} step={limits.cpu.step} />
                                     </Field>
 
-                                    <Field icon={<MemoryStick size={16} />} label="Memória" hint="memory_gb (backend)">
+                                    <Field icon={<MemoryStick size={16} />} label="Memória" hint="memory_gb">
                                         <RangeRow value={memGb} setValue={setMemGb} min={limits.memGb.min} max={limits.memGb.max} step={limits.memGb.step} suffix=" GB" />
                                     </Field>
 
-                                    <Field icon={<HardDrive size={16} />} label="Disco" hint="disk_gb (backend)">
+                                    <Field icon={<HardDrive size={16} />} label="Disco" hint="disk_gb">
                                         <RangeRow value={diskGb} setValue={setDiskGb} min={limits.diskGb.min} max={limits.diskGb.max} step={limits.diskGb.step} suffix=" GB" />
                                     </Field>
 
-                                    <Field icon={<ShoppingCart size={16} />} label="Quantidade" hint="qty">
+                                    <Field icon={<Hash size={16} />} label="Quantidade" hint="qty">
                                         <RangeRow value={qty} setValue={setQty} min={limits.qty.min} max={limits.qty.max} step={limits.qty.step} />
                                     </Field>
                                 </div>
@@ -548,9 +561,7 @@ export default function PlanDetailPage() {
                                             <div className="mt-3">
                                                 <div className="text-xs text-slate-500">Plano base</div>
                                                 <div className="text-3xl font-extrabold text-slate-100">{basePrice}</div>
-                                                <div className="mt-2 text-xs text-slate-500">
-                                                    Ative Custom para recalcular pelo backend.
-                                                </div>
+                                                <div className="mt-2 text-xs text-slate-500">Ative Custom para recalcular pelo backend.</div>
                                             </div>
                                         )}
 
@@ -571,14 +582,23 @@ export default function PlanDetailPage() {
                                                     </div>
                                                 )}
 
-                                                {calcPriceText && !calcLoading && !calcErr && (
-                                                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                                                        <div className="text-xs text-slate-500">Unit price</div>
-                                                        <div className="text-3xl font-extrabold text-slate-100">{calcPriceText}</div>
+                                                {calcUnitText && !calcLoading && !calcErr && (
+                                                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                                                        <div>
+                                                            <div className="text-xs text-slate-500">Unit price</div>
+                                                            <div className="text-3xl font-extrabold text-slate-100">{calcUnitText}</div>
+                                                        </div>
+
+                                                        {calcTotalText && (
+                                                            <div>
+                                                                <div className="text-xs text-slate-500">Total ({qty}x)</div>
+                                                                <div className="text-xl font-bold text-slate-100">{calcTotalText}</div>
+                                                            </div>
+                                                        )}
+
                                                         {calcResult?.pricing_version && (
-                                                            <div className="mt-2 text-[11px] text-slate-500">
-                                                                pricing_version:{" "}
-                                                                <span className="text-slate-300">{calcResult.pricing_version}</span>
+                                                            <div className="text-[11px] text-slate-500">
+                                                                pricing_version: <span className="text-slate-300">{calcResult.pricing_version}</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -608,9 +628,15 @@ export default function PlanDetailPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <div>VM Panel · Shop</div>
                         <div className="flex gap-3">
-                            <a href="/shop#about" className="hover:text-slate-300">Sobre</a>
-                            <a href="/shop#support" className="hover:text-slate-300">Suporte</a>
-                            <a href="/docs" className="hover:text-slate-300">Docs</a>
+                            <a href="/shop#about" className="hover:text-slate-300">
+                                Sobre
+                            </a>
+                            <a href="/shop#support" className="hover:text-slate-300">
+                                Suporte
+                            </a>
+                            <a href="/docs" className="hover:text-slate-300">
+                                Docs
+                            </a>
                         </div>
                     </div>
                 </footer>

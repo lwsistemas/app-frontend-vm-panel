@@ -23,7 +23,7 @@ const API_URLS = {
 
 // 🔧 Forçar ambiente manualmente (opcional)
 // const FORCE_MODE = import.meta.env.VITE_API_MODE || null;
-const FORCE_MODE = "staging";
+const FORCE_MODE = "local";
 
 
 

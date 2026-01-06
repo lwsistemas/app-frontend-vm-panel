@@ -1,7 +1,7 @@
 // src/pages/Public/Shop/PageShop.jsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { Cpu, MemoryStick, HardDrive, Repeat, CalendarClock, Shield } from "lucide-react";
-import Shop from "../../../services/shop";
+import Shop from "../../../services/shop.jsx";
 import PublicHeader from "./components/PublicHeader";
 
 function parseMeta(meta) {
@@ -33,10 +33,10 @@ function BillingPill({ billing_type, interval }) {
 
     return (
         <span className="shrink-0 inline-flex items-center gap-2 text-[11px] px-3 py-2 rounded-xl border border-white/10 bg-black/20 text-slate-300">
-      <Icon size={14} className="opacity-80" />
+            <Icon size={14} className="opacity-80" />
             {billing_type}
             {interval ? ` · ${interval}` : ""}
-    </span>
+        </span>
     );
 }
 
@@ -54,9 +54,7 @@ function PlanCard({ plan }) {
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">
-                        {plan.code}
-                    </div>
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">{plan.code}</div>
 
                     <div className="mt-1 text-base font-semibold text-slate-100 truncate">
                         {plan.name || `Plan #${plan.id}`}
@@ -64,14 +62,8 @@ function PlanCard({ plan }) {
 
                     <div className="mt-3 grid grid-cols-1 gap-2">
                         <SpecItem icon={<Cpu size={14} />} value={cpu ? `${cpu} vCPU` : "CPU —"} />
-                        <SpecItem
-                            icon={<MemoryStick size={14} />}
-                            value={memGb ? `${memGb}GB RAM` : "RAM —"}
-                        />
-                        <SpecItem
-                            icon={<HardDrive size={14} />}
-                            value={diskGb ? `${diskGb}GB Disk` : "Disk —"}
-                        />
+                        <SpecItem icon={<MemoryStick size={14} />} value={memGb ? `${memGb}GB RAM` : "RAM —"} />
+                        <SpecItem icon={<HardDrive size={14} />} value={diskGb ? `${diskGb}GB Disk` : "Disk —"} />
                     </div>
 
                     {meta?.sla && (
@@ -86,9 +78,7 @@ function PlanCard({ plan }) {
             </div>
 
             <div className="mt-5 flex items-center justify-between">
-                <div className="text-2xl font-bold text-slate-100">
-                    {fmtMoney(plan.default_price, plan.currency)}
-                </div>
+                <div className="text-2xl font-bold text-slate-100">{fmtMoney(plan.default_price, plan.currency)}</div>
 
                 <div className="px-3 py-2 rounded-xl border border-sky-700/40 bg-sky-900/10 group-hover:bg-white/5 text-sm font-semibold text-sky-200">
                     Configure
@@ -100,10 +90,7 @@ function PlanCard({ plan }) {
 
 function SectionCard({ id, title, children }) {
     return (
-        <section
-            id={id}
-            className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-5"
-        >
+        <section id={id} className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950 to-slate-900 p-5">
             <div className="text-sm font-semibold text-slate-100">{title}</div>
             <div className="mt-2 text-xs text-slate-400">{children}</div>
         </section>
@@ -179,8 +166,8 @@ export default function PageShop() {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(16,185,129,0.08),transparent_55%)]" />
             </div>
 
-            {/* Header pesado existente */}
-            <PublicHeader cartCount={0} onOpenCart={() => {}} />
+            {/* ✅ Header pesado já inclui CartDrawer */}
+            <PublicHeader />
 
             <main className="max-w-6xl mx-auto p-6 space-y-5">
                 {/* Header interno */}
@@ -192,9 +179,7 @@ export default function PageShop() {
                             </div>
                             <div>
                                 <div className="text-lg font-semibold text-slate-100">Shop</div>
-                                <div className="text-xs text-slate-500">
-                                    Plans · padrão painel · configure e finalize
-                                </div>
+                                <div className="text-xs text-slate-500">Plans · padrão painel · configure e finalize</div>
                             </div>
                         </div>
 
@@ -210,9 +195,7 @@ export default function PageShop() {
                     <div className="mt-4 rounded-2xl p-4 border border-white/10 bg-white/5">
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                             <div className="md:col-span-8 relative">
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                                    ⌕
-                                </div>
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">⌕</div>
                                 <input
                                     className="w-full bg-black/30 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500"
                                     placeholder="Buscar por plano, cpu, ram, disk, sla..."
@@ -257,14 +240,13 @@ export default function PageShop() {
                 {/* About / Support */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <SectionCard id="about" title="Sobre">
-                        Catálogo oficial do VM Panel. Preço e validação são sempre
-                        autoritativos no backend. Fluxo: selecionar plano → configurar →
-                        checkout.
+                        Catálogo oficial do VM Panel. Preço e validação são sempre autoritativos no backend. Fluxo:
+                        selecionar plano → configurar → checkout.
                     </SectionCard>
 
                     <SectionCard id="support" title="Suporte">
-                        Precisa de ajuda? Abra ticket ou consulte a documentação. Em produção
-                        o checkout exige login/registro antes de finalizar.
+                        Precisa de ajuda? Abra ticket ou consulte a documentação. Em produção o checkout exige
+                        login/registro antes de finalizar.
                     </SectionCard>
                 </div>
 
